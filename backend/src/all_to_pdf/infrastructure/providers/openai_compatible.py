@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 import httpx
 
 from all_to_pdf.domain.provider import (
@@ -116,7 +114,7 @@ class OpenAICompatibleTranslationProvider:
     @staticmethod
     def _parse_response(response: httpx.Response) -> str:
         try:
-            payload: Any = response.json()
+            payload = response.json()
             translated = payload["choices"][0]["message"]["content"]
         except (ValueError, TypeError, KeyError, IndexError) as exc:
             raise ProviderInvalidResponseError(

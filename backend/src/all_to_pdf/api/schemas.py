@@ -34,7 +34,7 @@ class SubmitJobRequest(BaseModel):
         return stripped
 
     @model_validator(mode="after")
-    def validate_provider_configuration(self) -> "SubmitJobRequest":
+    def validate_provider_configuration(self) -> SubmitJobRequest:
         if (
             self.translator_profile is TranslatorProfile.OPENAI_COMPATIBLE_LLM
             and not self.llm_profile_id
@@ -59,7 +59,7 @@ class JobResponse(BaseModel):
     updated_at: datetime
 
     @classmethod
-    def from_domain(cls, job: TranslationJob) -> "JobResponse":
+    def from_domain(cls, job: TranslationJob) -> JobResponse:
         return cls(
             id=job.id,
             input_object_key=job.input_object_key,
