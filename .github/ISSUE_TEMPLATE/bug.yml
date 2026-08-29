@@ -1,0 +1,34 @@
+name: Bug
+description: Lỗi có reproduction và regression test
+title: "fix: "
+body:
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Cách tái hiện
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Kết quả mong đợi
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Kết quả thực tế
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Log, fixture hoặc artifact
+  - type: checkboxes
+    id: regression
+    attributes:
+      label: Regression
+      options:
+        - label: Sẽ thêm regression test
+    validations:
+      required: true

@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Không gian dịch PDF giữ bố cục dành cho tài liệu kỹ thuật và học thuật."
+    />
+    <title>All_to_PDF — Translation Studio</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#workspace">Bỏ qua phần điều hướng</a>
+
+    <header class="masthead">
+      <div class="brand-lockup">
+        <span class="brand-mark" aria-hidden="true">A/P</span>
+        <div>
+          <p class="eyebrow">Layout-preserving translation</p>
+          <h1>All_to_PDF</h1>
+        </div>
+      </div>
+      <div class="system-state" aria-live="polite">
+        <span class="pulse" aria-hidden="true"></span>
+        <span id="system-status">Đang kiểm tra hệ thống</span>
+      </div>
+    </header>
+
+    <main id="workspace" class="workspace">
+      <aside class="briefing" aria-labelledby="briefing-title">
+        <p class="section-number">00 / BRIEF</p>
+        <h2 id="briefing-title">Dịch nội dung.<br />Giữ cấu trúc.</h2>
+        <p class="briefing-copy">
+          Công thức, hình ảnh và nhịp trang được bảo vệ trước khi văn bản đi qua nhà cung cấp
+          dịch. Mỗi đầu ra phải vượt qua kiểm định trước khi phát hành.
+        </p>
+
+        <dl class="trust-ledger">
+          <div>
+            <dt>Đầu ra</dt>
+            <dd>Mono PDF</dd>
+          </div>
+          <div>
+            <dt>Mặc định</dt>
+            <dd>Azure NMT</dd>
+          </div>
+          <div>
+            <dt>Bố cục</dt>
+            <dd>Object-level</dd>
+          </div>
+          <div>
+            <dt>Trạng thái</dt>
+            <dd>Job-based</dd>
+          </div>
+        </dl>
+
+        <div class="principle-note">
+          <span>Nguyên tắc 01</span>
+          <p>Không coi “tạo được PDF” là thành công. Chỉ phát hành khi chất lượng đạt chuẩn.</p>
+        </div>
+      </aside>
+
+      <section class="studio" aria-label="Thiết lập bản dịch">
+        <form id="translation-form" class="translation-form">
+          <section class="form-section" aria-labelledby="document-title">
+            <div class="section-heading">
+              <p class="section-number">01 / DOCUMENT</p>
+              <h2 id="document-title">Chọn tài liệu nguồn</h2>
+            </div>
+
+            <label id="drop-zone" class="drop-zone" for="pdf-file">
+              <input id="pdf-file" name="file" type="file" accept="application/pdf,.pdf" />
+              <span class="drop-index" aria-hidden="true">PDF</span>
+              <span class="drop-copy">
+                <strong>Thả PDF vào đây</strong>
+                <small>hoặc nhấn để duyệt — tối đa 50 MB ở cấu hình hiện tại</small>
+              </span>
+              <span class="drop-action" aria-hidden="true">Chọn tệp ↗</span>
+            </label>
+
+            <div id="file-ledger" class="file-ledger" hidden>
+              <div>
+                <span class="ledger-label">Tệp</span>
+                <strong id="file-name">—</strong>
+              </div>
+              <div>
+                <span class="ledger-label">Dung lượng</span>
+                <strong id="file-size">—</strong>
+              </div>
+              <div>
+                <span class="ledger-label">Object key</span>
+                <code id="object-key">Chưa tải lên</code>
+              </div>
+            </div>
+          </section>
+
+          <section class="form-section" aria-labelledby="language-title">
+            <div class="section-heading">
+              <p class="section-number">02 / LANGUAGE</p>
+              <h2 id="language-title">Hướng dịch</h2>
+            </div>
+
+            <div class="language-route">
+              <label>
+                <span>Ngôn ngữ nguồn</span>
+                <select id="source-language" name="source_language">
+                  <option value="en" selected>English</option>
+                  <option value="vi">Tiếng Việt</option>
+                </select>
+              </label>
+              <span class="route-arrow" aria-hidden="true">→</span>
+              <label>
+                <span>Ngôn ngữ đích</span>
+                <select id="target-language" name="target_language">
+                  <option value="vi" selected>Tiếng Việt</option>
+                  <option value="en">English</option>
+                </select>
+              </label>
+            </div>
+          </section>
+
+          <section class="form-section" aria-labelledby="provider-title">
+            <div class="section-heading">
+              <p class="section-number">03 / ENGINE</p>
+              <h2 id="provider-title">Chọn bộ máy dịch</h2>
+            </div>
+
+            <div class="provider-grid" role="radiogroup" aria-label="Nhà cung cấp dịch">
+              <label class="provider-option" data-provider="azure_nmt">
+                <input type="radio" name="translator_profile" value="azure_nmt" checked />
+                <span class="provider-kicker">DEFAULT / NMT</span>
+                <strong>Azure Translator</strong>
+                <small>Ổn định, API chính thức, phù hợp khối lượng lớn.</small>
+                <span class="provider-meta">
+                  <span>F0: 2M ký tự/tháng</span>
+                  <span id="azure-state" class="config-state">Đang kiểm tra</span>
+                </span>
+              </label>
+
+              <label class="provider-option" data-provider="openai_compatible_llm">
+                <input
+                  type="radio"
+                  name="translator_profile"
+                  value="openai_compatible_llm"
+                />
+                <span class="provider-kicker">OPTIONAL / LLM</span>
+                <strong>OpenAI-compatible</strong>
+                <small>Dùng profile đã cấu hình bằng base URL, API key và model.</small>
+                <span class="provider-meta">
+                  <span>Prompt có bảo vệ token</span>
+                  <span id="llm-state" class="config-state">Đang kiểm tra</span>
+                </span>
+              </label>
+            </div>
+
+            <label id="llm-profile-field" class="text-field" hidden>
+              <span>LLM profile ID</span>
+              <input
+                id="llm-profile-id"
+                type="text"
+                autocomplete="off"
+                placeholder="tenant-default"
+              />
+              <small>Khóa bí mật nằm trong secret manager, không nhập trực tiếp tại đây.</small>
+            </label>
+
+            <label class="switch-row">
+              <input id="paid-fallback" type="checkbox" />
+              <span class="switch-control" aria-hidden="true"></span>
+              <span>
+                <strong>Cho phép fallback có tính phí</strong>
+                <small>Chỉ chuyển sang LLM khi Azure hết quota nếu tùy chọn này được bật.</small>
+              </span>
+            </label>
+          </section>
+
+          <section class="form-section submit-section" aria-labelledby="review-title">
+            <div class="section-heading">
+              <p class="section-number">04 / COMMIT</p>
+              <h2 id="review-title">Đưa vào hàng đợi</h2>
+            </div>
+            <div class="submit-layout">
+              <p>
+                Tài liệu sẽ được kiểm tra, phân tích bố cục, dịch, dàn chữ và kiểm định trước khi
+                có thể tải xuống.
+              </p>
+              <button id="submit-button" class="primary-button" type="submit" disabled>
+                <span>Bắt đầu xử lý</span>
+                <span aria-hidden="true">↗</span>
+              </button>
+            </div>
+            <p id="form-message" class="form-message" role="status" aria-live="polite"></p>
+          </section>
+        </form>
+      </section>
+
+      <aside class="job-desk" aria-labelledby="job-title">
+        <div class="job-desk-header">
+          <p class="section-number">LIVE / JOB</p>
+          <h2 id="job-title">Bàn kiểm định</h2>
+        </div>
+
+        <div id="empty-job" class="empty-job">
+          <span class="empty-symbol" aria-hidden="true">□</span>
+          <p>Chưa có job trong phiên này.</p>
+          <small>Trạng thái xử lý sẽ xuất hiện ở đây.</small>
+        </div>
+
+        <div id="active-job" class="active-job" hidden>
+          <div class="job-identity">
+            <span id="job-status-badge" class="status-badge">QUEUED</span>
+            <code id="job-id">—</code>
+          </div>
+
+          <ol id="job-timeline" class="job-timeline">
+            <li data-status="queued"><span></span>Hàng đợi</li>
+            <li data-status="preflight"><span></span>Kiểm tra đầu vào</li>
+            <li data-status="parsing"><span></span>Phân tích PDF</li>
+            <li data-status="translating"><span></span>Dịch nội dung</li>
+            <li data-status="typesetting"><span></span>Dàn lại chữ</li>
+            <li data-status="generating_pdf"><span></span>Tạo PDF</li>
+            <li data-status="quality_check"><span></span>Kiểm định</li>
+            <li data-status="succeeded"><span></span>Hoàn tất</li>
+          </ol>
+
+          <div class="job-actions">
+            <button id="cancel-job" class="text-button" type="button">Hủy job</button>
+            <a id="output-link" class="output-link" href="#" hidden>Tải PDF ↗</a>
+          </div>
+        </div>
+      </aside>
+    </main>
+
+    <footer class="site-footer">
+      <span>All_to_PDF / Production foundation</span>
+      <span>Không lưu API key trong trình duyệt</span>
+    </footer>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
