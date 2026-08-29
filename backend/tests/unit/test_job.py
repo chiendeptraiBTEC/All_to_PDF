@@ -28,6 +28,7 @@ def test_job_follows_valid_lifecycle() -> None:
     job = make_job().queue()
     job = job.transition_to(JobStatus.PREFLIGHT)
     job = job.transition_to(JobStatus.PARSING)
+    job = job.record_progress(22.0, stage="Parse paragraphs")
     job = job.transition_to(JobStatus.TRANSLATING)
     job = job.transition_to(JobStatus.TYPESETTING)
     job = job.transition_to(JobStatus.GENERATING_PDF)
@@ -36,6 +37,7 @@ def test_job_follows_valid_lifecycle() -> None:
 
     assert job.status is JobStatus.SUCCEEDED
     assert job.output_object_key == "outputs/job-1.pdf"
+    assert job.progress_percent == 100.0
     assert job.status.is_terminal
 
 
@@ -55,6 +57,13 @@ def test_succeeded_job_requires_output() -> None:
 
     with pytest.raises(InvalidJobTransition):
         job.transition_to(JobStatus.SUCCEEDED)
+
+
+def test_progress_must_be_monotonic() -> None:
+    job = make_job().queue().transition_to(JobStatus.PREFLIGHT)
+    job = job.record_progress(20, stage="preflight")
+    with pytest.raises(ValueError, match="monotonic"):
+        job.record_progress(19, stage="preflight")
 
 
 def test_llm_profile_requires_profile_id() -> None:

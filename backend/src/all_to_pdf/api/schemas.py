@@ -53,6 +53,8 @@ class JobResponse(BaseModel):
     allow_paid_fallback: bool
     llm_profile_id: str | None
     status: JobStatus
+    progress_percent: float
+    progress_stage: str | None
     failure_code: str | None
     failure_message: str | None
     created_at: datetime
@@ -70,6 +72,8 @@ class JobResponse(BaseModel):
             allow_paid_fallback=job.allow_paid_fallback,
             llm_profile_id=job.llm_profile_id,
             status=job.status,
+            progress_percent=job.progress_percent,
+            progress_stage=job.progress_stage,
             failure_code=job.failure_code,
             failure_message=job.failure_message,
             created_at=job.created_at,

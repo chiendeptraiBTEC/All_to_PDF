@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import logging
 import uuid
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 import uvicorn
@@ -15,7 +18,7 @@ from starlette.middleware.base import RequestResponseEndpoint
 from starlette.responses import Response
 
 from all_to_pdf.api.router import api_router
-from all_to_pdf.bootstrap import Container, build_container
+from all_to_pdf.bootstrap import Container, build_container, build_worker
 from all_to_pdf.config import Settings
 
 logger = logging.getLogger(__name__)
@@ -23,12 +26,30 @@ logger = logging.getLogger(__name__)
 
 def create_app(settings: Settings | None = None, container: Container | None = None) -> FastAPI:
     resolved_container = container or build_container(settings)
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        worker_task: asyncio.Task[None] | None = None
+        if resolved_container.settings.embedded_worker_enabled:
+            worker = build_worker(resolved_container)
+            worker_task = asyncio.create_task(
+                worker.process_job.run_forever(resolved_container.queue),
+                name="embedded-pdf-worker",
+            )
+        try:
+            yield
+        finally:
+            if worker_task is not None:
+                worker_task.cancel()
+                await asyncio.gather(worker_task, return_exceptions=True)
+
     app = FastAPI(
         title="All_to_PDF API",
-        version="0.1.0",
+        version="0.2.0",
         docs_url="/api/docs",
         openapi_url="/api/openapi.json",
         redoc_url=None,
+        lifespan=lifespan,
     )
     app.state.container = resolved_container
 

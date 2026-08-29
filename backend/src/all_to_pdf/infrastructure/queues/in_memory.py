@@ -15,6 +15,10 @@ class InMemoryJobQueue:
     async def dequeue(self) -> str:
         return await self._queue.get()
 
+    async def acknowledge(self, job_id: str) -> None:
+        del job_id
+        self._queue.task_done()
+
     @property
     def size(self) -> int:
         return self._queue.qsize()

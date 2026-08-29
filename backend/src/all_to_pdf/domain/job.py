@@ -107,6 +107,18 @@ _ALLOWED_TRANSITIONS: dict[JobStatus, frozenset[JobStatus]] = {
     ),
 }
 
+_PROGRESS_FLOOR: dict[JobStatus, float] = {
+    JobStatus.UPLOADED: 0.0,
+    JobStatus.QUEUED: 1.0,
+    JobStatus.PREFLIGHT: 3.0,
+    JobStatus.PARSING: 10.0,
+    JobStatus.TRANSLATING: 35.0,
+    JobStatus.TYPESETTING: 75.0,
+    JobStatus.GENERATING_PDF: 88.0,
+    JobStatus.QUALITY_CHECK: 95.0,
+    JobStatus.SUCCEEDED: 100.0,
+}
+
 
 @dataclass(frozen=True, slots=True)
 class TranslationJob:
@@ -121,6 +133,8 @@ class TranslationJob:
     status: JobStatus
     created_at: datetime
     updated_at: datetime
+    progress_percent: float = 0.0
+    progress_stage: str | None = None
     output_object_key: str | None = None
     failure_code: str | None = None
     failure_message: str | None = None
@@ -156,6 +170,7 @@ class TranslationJob:
             status=JobStatus.UPLOADED,
             created_at=timestamp,
             updated_at=timestamp,
+            progress_stage=JobStatus.UPLOADED.value,
         )
 
     def transition_to(
@@ -178,13 +193,38 @@ class TranslationJob:
             raise InvalidJobTransition("a succeeded job must have output_object_key")
         if status in {JobStatus.FAILED_RETRYABLE, JobStatus.FAILED_PERMANENT} and not failure_code:
             raise InvalidJobTransition("a failed job must have failure_code")
+        progress = max(self.progress_percent, _PROGRESS_FLOOR.get(status, self.progress_percent))
         return replace(
             self,
             status=status,
             updated_at=now or datetime.now(UTC),
+            progress_percent=progress,
+            progress_stage=status.value,
             output_object_key=output_object_key or self.output_object_key,
             failure_code=failure_code,
             failure_message=failure_message,
+        )
+
+    def record_progress(
+        self,
+        percent: float,
+        *,
+        stage: str,
+        now: datetime | None = None,
+    ) -> TranslationJob:
+        if self.status.is_terminal:
+            raise InvalidJobTransition("cannot update progress for a terminal job")
+        if not 0.0 <= percent <= 100.0:
+            raise ValueError("progress percent must be between 0 and 100")
+        if percent < self.progress_percent:
+            raise ValueError("progress percent must be monotonic")
+        if not stage.strip():
+            raise ValueError("progress stage must not be blank")
+        return replace(
+            self,
+            progress_percent=percent,
+            progress_stage=stage.strip()[:200],
+            updated_at=now or datetime.now(UTC),
         )
 
     def queue(self, *, now: datetime | None = None) -> TranslationJob:
