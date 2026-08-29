@@ -1,0 +1,14 @@
+services:
+  app:
+    build: .
+    environment:
+      ATP_ENVIRONMENT: development
+      ATP_WEB_DIRECTORY: /app/frontend
+      ATP_LOCAL_STORAGE_DIRECTORY: /app/var/storage
+    ports:
+      - "8000:8000"
+    volumes:
+      - app-data:/app/var
+
+volumes:
+  app-data:

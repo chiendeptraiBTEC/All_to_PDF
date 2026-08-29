@@ -1,0 +1,31 @@
+name: Feature
+description: Tính năng có acceptance criteria và quality gates
+title: "feat: "
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Vấn đề
+      description: Mô tả nhu cầu người dùng hoặc vận hành.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Các điều kiện kiểm chứng được.
+    validations:
+      required: true
+  - type: textarea
+    id: risks
+    attributes:
+      label: Rủi ro
+  - type: checkboxes
+    id: gates
+    attributes:
+      label: Quality gates
+      options:
+        - label: Có test strategy
+        - label: Có observability
+        - label: Có security/privacy review
+        - label: Có cập nhật project memory
