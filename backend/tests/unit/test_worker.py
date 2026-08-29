@@ -4,10 +4,14 @@ import asyncio
 from collections.abc import AsyncIterator
 from pathlib import Path
 
+import pytest
+
 from all_to_pdf.application.engine import (
     EngineProgress,
     OcrRequiredError,
     ProgressCallback,
+    ReviewRequiredError,
+    TranslationEngineError,
     TranslationRunRequest,
     TranslationRunResult,
 )
@@ -34,8 +38,8 @@ class CopyingRunner:
     ) -> TranslationRunResult:
         for status, percent in (
             (JobStatus.PARSING, 20.0),
-            (JobStatus.TRANSLATING, 50.0),
-            (JobStatus.TYPESETTING, 80.0),
+            (JobStatus.TRANSLATING, 30.0),
+            (JobStatus.TYPESETTING, 70.0),
             (JobStatus.GENERATING_PDF, 92.0),
         ):
             await on_progress(EngineProgress(status, percent, status.value))
@@ -52,6 +56,36 @@ class OcrRunner:
         del request
         await on_progress(EngineProgress(JobStatus.PARSING, 15.0, "detect scanned PDF"))
         raise OcrRequiredError("fixture has no text layer")
+
+
+class ErrorRunner:
+    def __init__(self, error: Exception) -> None:
+        self._error = error
+
+    async def run(
+        self,
+        request: TranslationRunRequest,
+        on_progress: ProgressCallback,
+    ) -> TranslationRunResult:
+        del request, on_progress
+        raise self._error
+
+
+class ReviewRunner:
+    async def run(
+        self,
+        request: TranslationRunRequest,
+        on_progress: ProgressCallback,
+    ) -> TranslationRunResult:
+        del request
+        await on_progress(EngineProgress(JobStatus.TYPESETTING, 80, "typesetting"))
+        raise ReviewRequiredError("manual review")
+
+
+class RejectingQualityGate:
+    async def validate(self, source_path: Path, output_path: Path) -> None:
+        del source_path, output_path
+        raise ReviewRequiredError("quality review")
 
 
 async def _submitted_job(
@@ -101,7 +135,7 @@ async def test_worker_completes_job_and_publishes_output(tmp_path: Path) -> None
     assert completed.output_object_key is not None
     destination = tmp_path / "download.pdf"
     await storage.materialize_pdf(completed.output_object_key, destination)
-    assert destination.read_bytes() == _MINIMAL_PDF
+    assert await asyncio.to_thread(destination.read_bytes) == _MINIMAL_PDF
     assert queue.size == 0
 
 
@@ -119,3 +153,81 @@ async def test_worker_maps_scanned_pdf_to_ocr_required(tmp_path: Path) -> None:
 
     assert completed.status is JobStatus.OCR_REQUIRED
     assert completed.failure_code == "OCR_REQUIRED"
+
+
+@pytest.mark.parametrize(
+    ("error", "expected"),
+    [
+        (
+            TranslationEngineError("retry", code="TEMP", retryable=True),
+            JobStatus.FAILED_RETRYABLE,
+        ),
+        (
+            TranslationEngineError("bad", code="BAD", retryable=False),
+            JobStatus.FAILED_PERMANENT,
+        ),
+        (RuntimeError("unexpected"), JobStatus.FAILED_RETRYABLE),
+    ],
+)
+async def test_worker_maps_engine_and_unexpected_failures(
+    tmp_path: Path,
+    error: Exception,
+    expected: JobStatus,
+) -> None:
+    repository, queue, storage, _ = await _submitted_job(tmp_path)
+    worker = ProcessTranslationJob(
+        repository,
+        storage,
+        ErrorRunner(error),
+        BasicPdfQualityGate(),
+        workspace_root=tmp_path / "work",
+    )
+
+    completed = await worker.run_once(queue)
+
+    assert completed.status is expected
+    assert completed.failure_code is not None
+
+
+async def test_worker_maps_engine_and_quality_review(tmp_path: Path) -> None:
+    repository, queue, storage, _ = await _submitted_job(tmp_path)
+    worker = ProcessTranslationJob(
+        repository,
+        storage,
+        ReviewRunner(),
+        BasicPdfQualityGate(),
+        workspace_root=tmp_path / "work",
+    )
+    reviewed = await worker.run_once(queue)
+    assert reviewed.status is JobStatus.NEEDS_REVIEW
+
+    repository, queue, storage, _ = await _submitted_job(tmp_path / "quality")
+    worker = ProcessTranslationJob(
+        repository,
+        storage,
+        CopyingRunner(),
+        RejectingQualityGate(),
+        workspace_root=tmp_path / "quality-work",
+    )
+    rejected = await worker.run_once(queue)
+    assert rejected.status is JobStatus.NEEDS_REVIEW
+
+
+async def test_worker_returns_terminal_job_and_rejects_unknown_id(tmp_path: Path) -> None:
+    repository, queue, storage, job_id = await _submitted_job(tmp_path)
+    job = await repository.get(job_id)
+    assert job is not None
+    cancelled = job.cancel()
+    await repository.save(cancelled)
+    worker = ProcessTranslationJob(
+        repository,
+        storage,
+        CopyingRunner(),
+        BasicPdfQualityGate(),
+        workspace_root=tmp_path / "work",
+    )
+
+    assert await worker.execute(job_id) == cancelled
+    with pytest.raises(KeyError):
+        await worker.execute("missing")
+    assert queue.size == 1
