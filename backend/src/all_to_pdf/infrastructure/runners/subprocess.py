@@ -54,13 +54,17 @@ class BabelDocSubprocessRunner:
         request: TranslationRunRequest,
         on_progress: ProgressCallback,
     ) -> TranslationRunResult:
-        request.workspace.mkdir(parents=True, exist_ok=True)
-        manifest_path = request.workspace / "engine-request.json"
+        await asyncio.to_thread(request.workspace.mkdir, parents=True, exist_ok=True)
+        workspace, input_path, output_path = await asyncio.to_thread(
+            self._resolve_request_paths,
+            request,
+        )
+        manifest_path = workspace / "engine-request.json"
         payload = {
             "schema_version": 1,
-            "workspace": str(request.workspace.resolve()),
-            "input_path": str(request.input_path.resolve()),
-            "output_path": str(request.output_path.resolve()),
+            "workspace": str(workspace),
+            "input_path": str(input_path),
+            "output_path": str(output_path),
             "source_language": request.source_language,
             "target_language": request.target_language,
             "translator_profile": request.translator_profile.value,
@@ -135,16 +139,37 @@ class BabelDocSubprocessRunner:
         if finish_payload is None:
             raise EngineProtocolError("engine exited successfully without a finish event")
 
-        output_path = Path(str(finish_payload.get("output_path", ""))).resolve()
-        if output_path != request.output_path.resolve():
+        output_path, expected_path, output_exists = await asyncio.to_thread(
+            self._resolve_and_check_output,
+            finish_payload,
+            request,
+        )
+        if output_path != expected_path:
             raise EngineProtocolError("engine finish event referenced an unexpected output path")
-        if not output_path.is_file():
+        if not output_exists:
             raise EngineProtocolError("engine finish event referenced a missing output file")
         return TranslationRunResult(
             output_path=output_path,
             engine_name=str(finish_payload.get("engine_name", "BabelDOC")),
             engine_version=str(finish_payload.get("engine_version", "unknown")),
         )
+
+    @staticmethod
+    def _resolve_request_paths(request: TranslationRunRequest) -> tuple[Path, Path, Path]:
+        return (
+            request.workspace.resolve(),
+            request.input_path.resolve(),
+            request.output_path.resolve(),
+        )
+
+    @staticmethod
+    def _resolve_and_check_output(
+        finish_payload: Mapping[str, Any],
+        request: TranslationRunRequest,
+    ) -> tuple[Path, Path, bool]:
+        output_path = Path(str(finish_payload.get("output_path", ""))).resolve()
+        expected_path = request.output_path.resolve()
+        return output_path, expected_path, output_path.is_file()
 
     @staticmethod
     def _parse_progress(event: Mapping[str, Any]) -> EngineProgress:

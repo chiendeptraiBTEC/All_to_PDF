@@ -264,13 +264,18 @@ async def _translate(request: BridgeRequest) -> None:
             getattr(finish_result, "no_watermark_mono_pdf_path", None)
             or getattr(finish_result, "mono_pdf_path", None)
         )
-        if generated is None or not Path(generated).is_file():
+        generated_path = Path(generated) if generated is not None else None
+        generated_exists = (
+            generated_path is not None
+            and await asyncio.to_thread(generated_path.is_file)
+        )
+        if not generated_exists or generated_path is None:
             raise BridgeFailure(
                 "ENGINE_OUTPUT_MISSING",
                 "BabelDOC did not produce a mono PDF",
             )
-        request.output_path.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(generated, request.output_path)
+        await asyncio.to_thread(request.output_path.parent.mkdir, parents=True, exist_ok=True)
+        await asyncio.to_thread(shutil.copyfile, generated_path, request.output_path)
         _emit(
             {
                 "type": "finish",
@@ -290,10 +295,10 @@ async def _translate(request: BridgeRequest) -> None:
     except TranslationProviderError as exc:
         raise BridgeFailure(exc.code, str(exc), retryable=exc.retryable) from exc
     finally:
-        config.cleanup_temp_files()
+        await asyncio.to_thread(config.cleanup_temp_files)
         close = getattr(provider, "close", None)
         if callable(close):
-            close()
+            await asyncio.to_thread(close)
 
 
 def main() -> None:

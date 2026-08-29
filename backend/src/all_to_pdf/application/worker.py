@@ -13,8 +13,8 @@ from all_to_pdf.application.engine import (
     PdfQualityGate,
     ReviewRequiredError,
     TranslationEngineError,
-    TranslationRunRequest,
     TranslationRunner,
+    TranslationRunRequest,
 )
 from all_to_pdf.application.ports import JobQueueConsumer, JobRepository, ObjectStorage
 from all_to_pdf.domain.job import JobStatus, TranslationJob
@@ -149,8 +149,9 @@ class ProcessTranslationJob:
             )
         job = await self._require_active_job(job_id)
         job = await self._advance_to(job, progress.status)
+        effective_percent = max(job.progress_percent, progress.percent)
         updated = job.record_progress(
-            progress.percent,
+            effective_percent,
             stage=progress.stage,
         )
         await self._repository.save(updated)

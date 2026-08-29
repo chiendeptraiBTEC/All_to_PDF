@@ -80,8 +80,8 @@ class LocalObjectStorage:
         )
 
     async def materialize_pdf(self, key: str, destination: Path) -> Path:
-        source = self._resolve_key(key)
-        if not source.is_file():
+        source = await asyncio.to_thread(self._resolve_key, key)
+        if not await asyncio.to_thread(source.is_file):
             raise FileNotFoundError(f"object does not exist: {key}")
         await asyncio.to_thread(destination.parent.mkdir, parents=True, exist_ok=True)
         await asyncio.to_thread(shutil.copyfile, source, destination)
@@ -93,7 +93,7 @@ class LocalObjectStorage:
         *,
         original_filename: str,
     ) -> StoredObject:
-        if not source_path.is_file():
+        if not await asyncio.to_thread(source_path.is_file):
             raise FileNotFoundError(source_path)
         now = datetime.now(UTC)
         relative_path = (
@@ -109,9 +109,10 @@ class LocalObjectStorage:
         except Exception:
             await asyncio.to_thread(temporary.unlink, missing_ok=True)
             raise
+        size_bytes = await asyncio.to_thread(lambda: target.stat().st_size)
         return StoredObject(
             key=relative_path.as_posix(),
-            size_bytes=target.stat().st_size,
+            size_bytes=size_bytes,
             content_type="application/pdf",
             original_filename=Path(original_filename).name or "translated.pdf",
         )
