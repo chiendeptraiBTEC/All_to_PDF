@@ -29,6 +29,11 @@ Use `scripts/install_pdf_engine.sh`. PDFMathTranslate-next is installed with
 0.6.4 requires `pymupdf>=1.26.7`. The runtime imports only the PDFMathTranslate-next
 translator contract; BabelDOC remains the source of truth for PDF dependencies.
 
+At the selected PDFMathTranslate-next commit, `pdf2zh_next/config/main.py` imports
+`tomlkit`, but `tomlkit` is absent from the upstream `pyproject.toml` dependency list.
+The install script therefore declares `tomlkit>=0.13,<1` explicitly. This exception
+must be removed or revalidated whenever the upstream commit changes.
+
 ## Protocol
 
 Request schema version 1 contains workspace paths, language pair, provider profile
