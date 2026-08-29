@@ -18,7 +18,7 @@ from typing import Any, NoReturn
 
 from all_to_pdf.config import Settings
 from all_to_pdf.domain.job import JobStatus, TranslatorProfile
-from all_to_pdf.domain.provider import TranslationProviderError
+from all_to_pdf.domain.provider import TextTranslationProvider, TranslationProviderError
 from all_to_pdf.infrastructure.providers.factory import (
     ProviderConfigurationError,
     TranslationProviderFactory,
@@ -102,7 +102,7 @@ def _normalized_status(stage: str) -> JobStatus:
     return JobStatus.PARSING
 
 
-def _build_translator(provider: Any, request: BridgeRequest) -> Any:
+def _build_translator(provider: TextTranslationProvider, request: BridgeRequest) -> Any:
     try:
         from pdf2zh_next.translator.base_translator import BaseTranslator
     except ModuleNotFoundError as exc:
@@ -113,7 +113,7 @@ def _build_translator(provider: Any, request: BridgeRequest) -> Any:
 
     supports_llm = request.translator_profile is TranslatorProfile.OPENAI_COMPATIBLE_LLM
 
-    class ProviderBackedTranslator(BaseTranslator):  # type: ignore[misc, valid-type]
+    class ProviderBackedTranslator(BaseTranslator):  # type: ignore[misc]
         name = "alltopdf"
 
         def __init__(self) -> None:
