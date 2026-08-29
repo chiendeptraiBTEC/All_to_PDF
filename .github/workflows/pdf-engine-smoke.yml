@@ -1,0 +1,44 @@
+name: PDF engine smoke
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "23 3 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  babeldoc-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install system libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends git libgl1 libglib2.0-0 libfreetype6
+
+      - name: Install application and pinned PDF engine
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+          python -m pip install -r requirements/pdf-engine.lock.txt
+
+      - name: Run deterministic real-engine smoke
+        run: python scripts/run_pdf_engine_smoke.py --work-directory artifacts/pdf-engine-smoke
+
+      - name: Upload PDF and verification report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pdf-engine-smoke-${{ github.sha }}
+          path: artifacts/pdf-engine-smoke
+          if-no-files-found: error
+          retention-days: 14
