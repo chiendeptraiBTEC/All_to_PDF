@@ -115,14 +115,26 @@ def _create_source_pdf(path: Path) -> None:
         document.close()
 
 
+def _rect_values(rectangle: pymupdf.Rect) -> list[float]:
+    return [round(float(value), 4) for value in rectangle]
+
+
+def _normalize_text(text: str) -> str:
+    return " ".join(text.split())
+
+
 def _inspect_pdf(path: Path) -> dict[str, Any]:
     document = pymupdf.open(path)
     try:
-        text = "\n".join(page.get_text("text") for page in document)
-        drawings = sum(len(page.get_drawings()) for page in document)
+        page = document[0]
+        text = "\n".join(item.get_text("text") for item in document)
+        drawings = sum(len(item.get_drawings()) for item in document)
         return {
             "page_count": document.page_count,
-            "text": text.strip(),
+            "mediabox": _rect_values(page.mediabox),
+            "cropbox": _rect_values(page.cropbox),
+            "rotation": page.rotation,
+            "text": _normalize_text(text),
             "drawing_count": drawings,
         }
     finally:
@@ -135,6 +147,24 @@ def _sha256(path: Path) -> str:
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _validate_output(source: dict[str, Any], output: dict[str, Any]) -> None:
+    if source["page_count"] != output["page_count"]:
+        raise AssertionError("page count changed during engine smoke translation")
+    if source["mediabox"] != output["mediabox"]:
+        raise AssertionError("MediaBox changed during engine smoke translation")
+    if source["cropbox"] != output["cropbox"]:
+        raise AssertionError("CropBox changed during engine smoke translation")
+    if source["rotation"] != output["rotation"]:
+        raise AssertionError("page rotation changed during engine smoke translation")
+    if source["drawing_count"] != output["drawing_count"]:
+        raise AssertionError("vector drawing count changed during engine smoke translation")
+    output_text = str(output["text"])
+    if output_text != _EXPECTED_TEXT:
+        raise AssertionError(
+            f"translated text differs from the deterministic expectation: {output_text!r}"
+        )
 
 
 async def _run(output_directory: Path) -> dict[str, Any]:
@@ -172,11 +202,7 @@ async def _run(output_directory: Path) -> dict[str, Any]:
 
     source = _inspect_pdf(source_path)
     output = _inspect_pdf(output_path)
-    if source["page_count"] != output["page_count"]:
-        raise AssertionError("page count changed during engine smoke translation")
-    output_text = str(output["text"])
-    if "Xin chào thế giới" not in output_text or "giữ nguyên bố cục" not in output_text:
-        raise AssertionError(f"Vietnamese target text was not found: {output_text!r}")
+    _validate_output(source, output)
     if _SMOKE_PROVIDER.call_count < 1:
         raise AssertionError("BabelDOC never called the deterministic provider")
     finish_events = [event for event in emitted if event.get("type") == "finish"]
@@ -193,16 +219,12 @@ async def _run(output_directory: Path) -> dict[str, Any]:
         "source": {
             "path": source_path.name,
             "sha256": _sha256(source_path),
-            "page_count": source["page_count"],
-            "drawing_count": source["drawing_count"],
-            "text": source["text"],
+            **source,
         },
         "output": {
             "path": output_path.name,
             "sha256": _sha256(output_path),
-            "page_count": output["page_count"],
-            "drawing_count": output["drawing_count"],
-            "text": output["text"],
+            **output,
         },
         "events": emitted,
         "expected_text": _EXPECTED_TEXT,
