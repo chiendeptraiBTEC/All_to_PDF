@@ -12,8 +12,9 @@ Nhật ký này chỉ tóm tắt thay đổi và trỏ tới commit/PR; không t
 
 ## 2026-08-29 — Verification and remote delivery
 
-- 28 test pass, branch coverage 89.40%.
+- 28 test pass, branch coverage cục bộ 89.40%.
 - Compile, JavaScript syntax, package install và HTTP smoke test pass.
-- Đẩy foundation commit `56f97149b53968cd5789261b9b50e405aa82c67d` lên branch.
-- Mở draft PR [#1](https://github.com/chiendeptraiBTEC/All_to_PDF/pull/1).
-- CI lint/typecheck/container và visual review vẫn là merge gates.
+- Đẩy foundation lên branch và mở draft PR [#1](https://github.com/chiendeptraiBTEC/All_to_PDF/pull/1).
+- CI phát hiện tuần tự lỗi lint, format và thiếu `aiofiles` type stubs; từng lỗi được sửa bằng commit riêng thay vì hạ gate.
+- Code gate commit `707abbca21791af800d1b0674cdd492e3ba5ab34` vượt GitHub Actions run `33242200985`.
+- Quality job và container job đều pass; manual visual review vẫn là merge gate.
