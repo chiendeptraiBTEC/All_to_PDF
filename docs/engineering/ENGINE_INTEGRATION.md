@@ -34,6 +34,22 @@ At the selected PDFMathTranslate-next commit, `pdf2zh_next/config/main.py` impor
 The install script therefore declares `tomlkit>=0.13,<1` explicitly. This exception
 must be removed or revalidated whenever the upstream commit changes.
 
+## Pinned core workaround
+
+The selected BabelDOC commit's public `async_translate/do_translate` path produced a
+valid translated mono PDF in CI, but the process did not terminate before the
+30-minute job timeout. The uploaded artifact proved that parse, layout, translation,
+typesetting, subset and metadata output had completed.
+
+The bridge therefore calls the pinned `_do_translate_single` core synchronously in
+its already-isolated child process, then applies `fix_cmap` and `add_metadata`
+explicitly. It does not call upstream `migrate_toc` because BabelDOC's implementation
+at this commit migrates only dual outputs while this product emits mono PDF.
+
+This is a private-upstream API dependency and must be revalidated on every pin
+change. The parent worker owns the whole per-job temporary directory, so the bridge
+does not invoke the selected wrapper's non-terminating cleanup/finish path.
+
 ## Protocol
 
 Request schema version 1 contains workspace paths, language pair, provider profile

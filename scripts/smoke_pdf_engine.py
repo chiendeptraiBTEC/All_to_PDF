@@ -11,8 +11,10 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import faulthandler
 import hashlib
 import json
+import logging
 import time
 import traceback
 from pathlib import Path
@@ -145,7 +147,12 @@ async def _run(output_directory: Path) -> dict[str, Any]:
     bridge.TranslationProviderFactory = SmokeProviderFactory
     emitted: list[dict[str, Any]] = []
     original_emit = bridge._emit
-    bridge._emit = emitted.append
+
+    def record_event(event: dict[str, Any]) -> None:
+        emitted.append(event)
+        print(json.dumps(event, ensure_ascii=False), flush=True)
+
+    bridge._emit = record_event
     started = time.perf_counter()
     try:
         await bridge._translate(
@@ -213,6 +220,12 @@ def main() -> None:
     output_directory = args.output_directory.resolve()
     output_directory.mkdir(parents=True, exist_ok=True)
     report_path = output_directory / "report.json"
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    )
+    faulthandler.enable()
+    faulthandler.dump_traceback_later(300, repeat=True)
     try:
         report = asyncio.run(_run(output_directory))
     except Exception as exc:
@@ -229,6 +242,8 @@ def main() -> None:
             encoding="utf-8",
         )
         raise
+    finally:
+        faulthandler.cancel_dump_traceback_later()
     report_path.write_text(
         json.dumps(report, ensure_ascii=False, indent=2),
         encoding="utf-8",

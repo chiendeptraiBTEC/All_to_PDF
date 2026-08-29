@@ -11,6 +11,7 @@ import asyncio
 import json
 import shutil
 import sys
+import time
 import traceback
 from dataclasses import dataclass
 from pathlib import Path
@@ -102,6 +103,42 @@ def _normalized_status(stage: str) -> JobStatus:
     return JobStatus.PARSING
 
 
+class _ProgressRelay:
+    """Convert BabelDOC's synchronous progress callback into bridge JSONL events."""
+
+    def __init__(self) -> None:
+        self.last_percent = 10.0
+
+    def __call__(self, **event: Any) -> None:
+        if event.get("type") not in {"progress_start", "progress_update", "progress_end"}:
+            return
+        stage = str(event.get("stage", "Parse PDF"))
+        try:
+            raw_percent = float(event.get("overall_progress", self.last_percent))
+        except (TypeError, ValueError):
+            raw_percent = self.last_percent
+        self.last_percent = max(self.last_percent, min(raw_percent, 93.0))
+        _emit(
+            {
+                "type": "progress",
+                "status": _normalized_status(stage).value,
+                "percent": self.last_percent,
+                "stage": stage,
+            }
+        )
+
+    def finalizing(self) -> None:
+        self.last_percent = max(self.last_percent, 94.0)
+        _emit(
+            {
+                "type": "progress",
+                "status": JobStatus.GENERATING_PDF.value,
+                "percent": self.last_percent,
+                "stage": "Finalize CMap and metadata",
+            }
+        )
+
+
 def _build_translator(provider: TextTranslationProvider, request: BridgeRequest) -> Any:
     try:
         from pdf2zh_next.translator.base_translator import BaseTranslator
@@ -175,6 +212,52 @@ def _build_translator(provider: TextTranslationProvider, request: BridgeRequest)
     return ProviderBackedTranslator()
 
 
+def _run_babeldoc_core(config: Any) -> Any:
+    """Run the pinned synchronous core and bounded mono-PDF post-processing.
+
+    BabelDOC's public async wrapper produced a valid mono PDF but did not terminate
+    for the selected commit in CI. The pinned private core returned the artifact
+    before that wrapper's finish path. This adapter intentionally owns the stable
+    boundary and is protected by the real-engine smoke test.
+    """
+
+    try:
+        from babeldoc.format.pdf.high_level import (
+            _do_translate_single,
+            add_metadata,
+            fix_cmap,
+            get_translation_stage,
+        )
+        from babeldoc.progress_monitor import ProgressMonitor
+    except ModuleNotFoundError as exc:
+        raise BridgeFailure(
+            "ENGINE_DEPENDENCY_MISSING",
+            "BabelDOC is not installed in the engine image",
+        ) from exc
+
+    progress = _ProgressRelay()
+    started = time.perf_counter()
+    with ProgressMonitor(
+        get_translation_stage(config),
+        progress_change_callback=progress,
+        report_interval=config.report_interval,
+    ) as monitor:
+        result = _do_translate_single(monitor, config)
+    if result is None:
+        raise BridgeFailure(
+            "ENGINE_OUTPUT_MISSING",
+            "BabelDOC core returned no translation result",
+        )
+
+    result.total_seconds = time.perf_counter() - started
+    result.original_pdf_path = config.input_file
+    result.peak_memory_usage = 0
+    progress.finalizing()
+    fix_cmap(result, config)
+    add_metadata(result, config)
+    return result
+
+
 async def _translate(request: BridgeRequest) -> None:
     try:
         from babeldoc.babeldoc_exception.BabelDOCException import (
@@ -183,7 +266,6 @@ async def _translate(request: BridgeRequest) -> None:
             InputFileGeneratedByBabelDOCError,
             ScannedPDFError,
         )
-        from babeldoc.format.pdf.high_level import async_translate
         from babeldoc.format.pdf.translation_config import (
             TranslationConfig,
             WatermarkOutputMode,
@@ -225,38 +307,8 @@ async def _translate(request: BridgeRequest) -> None:
         table_model=None,
         metadata_extra_data="all-to-pdf",
     )
-    finish_result: Any | None = None
-    last_percent = 10.0
     try:
-        async for event in async_translate(config):
-            event_type = event.get("type")
-            if event_type == "progress_update":
-                stage = str(event.get("stage", "Parse PDF"))
-                raw_percent = float(event.get("overall_progress", last_percent))
-                last_percent = max(last_percent, min(raw_percent, 94.0))
-                _emit(
-                    {
-                        "type": "progress",
-                        "status": _normalized_status(stage).value,
-                        "percent": last_percent,
-                        "stage": stage,
-                    }
-                )
-            elif event_type == "error":
-                error = event.get("error")
-                if isinstance(error, ScannedPDFError):
-                    raise BridgeFailure("OCR_REQUIRED", str(error))
-                if isinstance(error, TranslationProviderError):
-                    raise BridgeFailure(error.code, str(error), retryable=error.retryable)
-                raise BridgeFailure("ENGINE_TRANSLATION_FAILED", str(error))
-            elif event_type == "finish":
-                finish_result = event.get("translate_result")
-
-        if finish_result is None:
-            raise BridgeFailure(
-                "ENGINE_PROTOCOL_ERROR",
-                "BabelDOC completed without a translate_result",
-            )
+        finish_result = await asyncio.to_thread(_run_babeldoc_core, config)
         generated = getattr(finish_result, "no_watermark_mono_pdf_path", None) or getattr(
             finish_result, "mono_pdf_path", None
         )
@@ -275,7 +327,7 @@ async def _translate(request: BridgeRequest) -> None:
             {
                 "type": "finish",
                 "output_path": str(request.output_path),
-                "engine_name": "BabelDOC + PDFMathTranslate-next translator contract",
+                "engine_name": "BabelDOC core + PDFMathTranslate-next translator contract",
                 "engine_version": f"{BABELDOC_COMMIT[:12]}+{PDFMATH_TRANSLATE_NEXT_COMMIT[:12]}",
             }
         )
@@ -290,7 +342,8 @@ async def _translate(request: BridgeRequest) -> None:
     except TranslationProviderError as exc:
         raise BridgeFailure(exc.code, str(exc), retryable=exc.retryable) from exc
     finally:
-        await asyncio.to_thread(config.cleanup_temp_files)
+        # The parent worker owns the entire per-job TemporaryDirectory. Avoid the
+        # selected upstream wrapper's non-terminating cleanup/finish path.
         close = getattr(provider, "close", None)
         if callable(close):
             await asyncio.to_thread(close)
