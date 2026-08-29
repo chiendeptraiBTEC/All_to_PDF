@@ -33,9 +33,7 @@ def create_app(settings: Settings | None = None, container: Container | None = N
     app.state.container = resolved_container
 
     @app.middleware("http")
-    async def request_context(
-        request: Request, call_next: RequestResponseEndpoint
-    ) -> Response:
+    async def request_context(request: Request, call_next: RequestResponseEndpoint) -> Response:
         request_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
         request.state.request_id = request_id
         response = await call_next(request)
