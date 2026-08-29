@@ -13,7 +13,6 @@ from all_to_pdf.domain.provider import (
     TranslationResult,
 )
 
-
 _SYSTEM_PROMPT = (
     "You are a deterministic professional translation engine. Preserve every formula "
     "placeholder, rich-text tag, code token, identifier, and protected token exactly. "
