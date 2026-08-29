@@ -6,6 +6,7 @@ import sys
 from collections.abc import AsyncIterator
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
+from typing import ClassVar
 
 import pytest
 
@@ -41,7 +42,7 @@ class FakeProvider:
 
 def _package(monkeypatch: pytest.MonkeyPatch, name: str) -> ModuleType:
     module = ModuleType(name)
-    setattr(module, "__path__", [])
+    module.__dict__["__path__"] = []
     monkeypatch.setitem(sys.modules, name, module)
     return module
 
@@ -92,10 +93,10 @@ def _install_fake_engine_modules(
         InputFileGeneratedByBabelDOCError,
         ScannedPDFError,
     ):
-        setattr(exception_module, exception.__name__, exception)
+        exception_module.__dict__[exception.__name__] = exception
 
     class FakeTranslationConfig:
-        instances: list[FakeTranslationConfig] = []
+        instances: ClassVar[list[FakeTranslationConfig]] = []
 
         def __init__(self, **kwargs: object) -> None:
             self.kwargs = kwargs
@@ -117,10 +118,10 @@ def _install_fake_engine_modules(
     class FakeBaseTranslator:
         pass
 
-    setattr(high_level_module, "async_translate", async_translate)
-    setattr(config_module, "TranslationConfig", FakeTranslationConfig)
-    setattr(config_module, "WatermarkOutputMode", FakeWatermarkOutputMode)
-    setattr(base_translator_module, "BaseTranslator", FakeBaseTranslator)
+    high_level_module.__dict__["async_translate"] = async_translate
+    config_module.__dict__["TranslationConfig"] = FakeTranslationConfig
+    config_module.__dict__["WatermarkOutputMode"] = FakeWatermarkOutputMode
+    base_translator_module.__dict__["BaseTranslator"] = FakeBaseTranslator
     return SimpleNamespace(
         ContentFilterError=ContentFilterError,
         ExtractTextError=ExtractTextError,
@@ -153,7 +154,7 @@ async def _request(
     profile: TranslatorProfile = TranslatorProfile.AZURE_NMT,
 ) -> bridge.BridgeRequest:
     workspace = tmp_path / "workspace"
-    await asyncio.to_thread(workspace.mkdir)
+    await asyncio.to_thread(workspace.mkdir, parents=True)
     input_path = workspace / "source.pdf"
     await asyncio.to_thread(input_path.write_bytes, _MINIMAL_PDF)
     return bridge.BridgeRequest(
