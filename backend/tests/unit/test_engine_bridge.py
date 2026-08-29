@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
-from collections.abc import AsyncIterator
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from typing import ClassVar
@@ -63,8 +62,10 @@ def _install_fake_engine_modules(
     _package(monkeypatch, "babeldoc.format.pdf")
     high_level_module = ModuleType("babeldoc.format.pdf.high_level")
     config_module = ModuleType("babeldoc.format.pdf.translation_config")
+    progress_module = ModuleType("babeldoc.progress_monitor")
     monkeypatch.setitem(sys.modules, "babeldoc.format.pdf.high_level", high_level_module)
     monkeypatch.setitem(sys.modules, "babeldoc.format.pdf.translation_config", config_module)
+    monkeypatch.setitem(sys.modules, "babeldoc.progress_monitor", progress_module)
 
     _package(monkeypatch, "pdf2zh_next")
     _package(monkeypatch, "pdf2zh_next.translator")
@@ -100,27 +101,73 @@ def _install_fake_engine_modules(
 
         def __init__(self, **kwargs: object) -> None:
             self.kwargs = kwargs
-            self.cleaned = False
+            self.report_interval = 0.1
+            self.input_file = kwargs["input_file"]
             self.__class__.instances.append(self)
-
-        def cleanup_temp_files(self) -> None:
-            self.cleaned = True
 
     class FakeWatermarkOutputMode:
         NoWatermark = "no-watermark"
 
-    async def async_translate(_config: object) -> AsyncIterator[dict[str, object]]:
+    class FakeProgressMonitor:
+        def __init__(
+            self,
+            _stages: object,
+            *,
+            progress_change_callback: object,
+            report_interval: float,
+        ) -> None:
+            self.progress_change_callback = progress_change_callback
+            self.report_interval = report_interval
+
+        def __enter__(self) -> FakeProgressMonitor:
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+    postprocess_calls: list[str] = []
+
+    def get_translation_stage(_config: object) -> list[tuple[str, float]]:
+        return [("fake", 1.0)]
+
+    def do_translate_single(monitor: FakeProgressMonitor, _config: object) -> object:
         for event in events:
             if isinstance(event, BaseException):
                 raise event
-            yield event
+            event_type = event.get("type")
+            if event_type in {"progress_start", "progress_update", "progress_end"}:
+                callback = monitor.progress_change_callback
+                assert callable(callback)
+                callback(**event)
+            elif event_type == "error":
+                error = event.get("error")
+                if isinstance(error, BaseException):
+                    raise error
+                raise RuntimeError(str(error))
+            elif event_type == "finish":
+                return event.get("translate_result")
+        return None
+
+    def fix_cmap(_result: object, _config: object) -> None:
+        postprocess_calls.append("fix_cmap")
+
+    def add_metadata(_result: object, _config: object) -> None:
+        postprocess_calls.append("add_metadata")
 
     class FakeBaseTranslator:
         pass
 
-    high_level_module.__dict__["async_translate"] = async_translate
+    high_level_module.__dict__.update(
+        {
+            "_do_translate_single": do_translate_single,
+            "add_metadata": add_metadata,
+            "fix_cmap": fix_cmap,
+            "get_translation_stage": get_translation_stage,
+        }
+    )
     config_module.__dict__["TranslationConfig"] = FakeTranslationConfig
     config_module.__dict__["WatermarkOutputMode"] = FakeWatermarkOutputMode
+    progress_module.__dict__["ProgressMonitor"] = FakeProgressMonitor
     base_translator_module.__dict__["BaseTranslator"] = FakeBaseTranslator
     return SimpleNamespace(
         ContentFilterError=ContentFilterError,
@@ -128,6 +175,7 @@ def _install_fake_engine_modules(
         InputFileGeneratedByBabelDOCError=InputFileGeneratedByBabelDOCError,
         ScannedPDFError=ScannedPDFError,
         TranslationConfig=FakeTranslationConfig,
+        postprocess_calls=postprocess_calls,
     )
 
 
@@ -221,13 +269,14 @@ async def test_translate_bridge_emits_progress_and_copies_output(
         "translating",
         "typesetting",
         "generating_pdf",
+        "generating_pdf",
     ]
     assert emitted[-2]["percent"] == 94.0
     assert emitted[-1]["type"] == "finish"
     config = runtime.TranslationConfig.instances[0]
     assert config.kwargs["no_dual"] is True
     assert config.kwargs["auto_extract_glossary"] is False
-    assert config.cleaned is True
+    assert runtime.postprocess_calls == ["fix_cmap", "add_metadata"]
     assert provider.closed is True
 
 
@@ -243,6 +292,22 @@ async def test_translate_bridge_emits_progress_and_copies_output(
 )
 def test_normalized_status(stage: str, expected: JobStatus) -> None:
     assert bridge._normalized_status(stage) is expected
+
+
+def test_progress_relay_ignores_non_progress_and_bad_percent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    emitted: list[dict[str, object]] = []
+    monkeypatch.setattr(bridge, "_emit", emitted.append)
+    relay = bridge._ProgressRelay()
+
+    relay(type="stage_summary")
+    relay(type="progress_update", stage="Parse PDF", overall_progress="bad")
+    relay.finalizing()
+
+    assert len(emitted) == 2
+    assert emitted[0]["percent"] == 10.0
+    assert emitted[1]["percent"] == 94.0
 
 
 def test_bridge_request_loads_valid_manifest(tmp_path: Path) -> None:
@@ -339,10 +404,10 @@ async def test_provider_backed_translator_supports_both_profiles(
     [
         (lambda runtime: runtime.ScannedPDFError("scan"), "OCR_REQUIRED", False),
         (lambda _runtime: ProviderRateLimitError("rate"), "PROVIDER_RATE_LIMITED", True),
-        (lambda _runtime: RuntimeError("bad"), "ENGINE_TRANSLATION_FAILED", False),
+        (lambda _runtime: RuntimeError("bad"), "ENGINE_UNEXPECTED_ERROR", True),
     ],
 )
-async def test_translate_bridge_maps_error_events(
+async def test_translate_bridge_maps_core_errors(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     error_factory: object,
@@ -356,7 +421,7 @@ async def test_translate_bridge_maps_error_events(
     request = await _request(tmp_path)
     factory = error_factory
     assert callable(factory)
-    events.append({"type": "error", "error": factory(runtime)})
+    events.append(factory(runtime))
 
     with pytest.raises(bridge.BridgeFailure) as captured:
         await bridge._translate(request)
@@ -366,7 +431,7 @@ async def test_translate_bridge_maps_error_events(
     assert provider.closed is True
 
 
-async def test_translate_bridge_maps_raised_extract_error_and_missing_output(
+async def test_translate_bridge_maps_extract_error_and_missing_output(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -398,7 +463,7 @@ async def test_translate_bridge_maps_raised_extract_error_and_missing_output(
     with pytest.raises(bridge.BridgeFailure) as missing:
         await bridge._translate(request)
     assert missing.value.code == "ENGINE_OUTPUT_MISSING"
-    assert runtime.TranslationConfig.instances[0].cleaned is True
+    assert runtime.postprocess_calls == ["fix_cmap", "add_metadata"]
 
 
 async def test_translate_bridge_rejects_unconfigured_provider(

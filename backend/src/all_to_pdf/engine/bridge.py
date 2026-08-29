@@ -142,7 +142,7 @@ class _ProgressRelay:
 def _build_translator(provider: TextTranslationProvider, request: BridgeRequest) -> Any:
     try:
         from pdf2zh_next.translator.base_translator import BaseTranslator
-    except ModuleNotFoundError as exc:
+    except ImportError as exc:
         raise BridgeFailure(
             "ENGINE_DEPENDENCY_MISSING",
             "PDFMathTranslate-next is not installed in the engine image",
@@ -229,7 +229,7 @@ def _run_babeldoc_core(config: Any) -> Any:
             get_translation_stage,
         )
         from babeldoc.progress_monitor import ProgressMonitor
-    except ModuleNotFoundError as exc:
+    except ImportError as exc:
         raise BridgeFailure(
             "ENGINE_DEPENDENCY_MISSING",
             "BabelDOC is not installed in the engine image",
@@ -270,7 +270,7 @@ async def _translate(request: BridgeRequest) -> None:
             TranslationConfig,
             WatermarkOutputMode,
         )
-    except ModuleNotFoundError as exc:
+    except ImportError as exc:
         raise BridgeFailure(
             "ENGINE_DEPENDENCY_MISSING",
             "BabelDOC is not installed in the engine image",
@@ -331,6 +331,8 @@ async def _translate(request: BridgeRequest) -> None:
                 "engine_version": f"{BABELDOC_COMMIT[:12]}+{PDFMATH_TRANSLATE_NEXT_COMMIT[:12]}",
             }
         )
+    except BridgeFailure:
+        raise
     except ScannedPDFError as exc:
         raise BridgeFailure("OCR_REQUIRED", str(exc)) from exc
     except ExtractTextError as exc:
@@ -341,6 +343,12 @@ async def _translate(request: BridgeRequest) -> None:
         raise BridgeFailure("PROVIDER_CONTENT_FILTERED", str(exc)) from exc
     except TranslationProviderError as exc:
         raise BridgeFailure(exc.code, str(exc), retryable=exc.retryable) from exc
+    except Exception as exc:
+        raise BridgeFailure(
+            "ENGINE_UNEXPECTED_ERROR",
+            type(exc).__name__,
+            retryable=True,
+        ) from exc
     finally:
         # The parent worker owns the entire per-job TemporaryDirectory. Avoid the
         # selected upstream wrapper's non-terminating cleanup/finish path.
