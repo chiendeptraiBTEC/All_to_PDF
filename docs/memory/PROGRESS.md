@@ -2,33 +2,63 @@
 
 ## M0 — Production foundation
 
-### Hoàn thành trong `feat/production-foundation`
+Đã hoàn thành và kiểm định trên nhánh `feat/production-foundation`:
 
-- [x] Tạo cấu trúc clean architecture: domain, application, infrastructure, API.
-- [x] Tạo job lifecycle có kiểm soát transition.
-- [x] Tạo upload PDF theo stream, giới hạn dung lượng, kiểm tra `%PDF-`, atomic rename.
-- [x] Tạo API submit/get/cancel với idempotency.
-- [x] Tạo provider contract và protected-token validator có kiểm tra thứ tự token.
-- [x] Tạo Azure Translator V3 adapter dùng API chính thức.
-- [x] Tạo OpenAI-compatible adapter với base URL/API key/model.
-- [x] Phân loại lỗi authentication, rate limit, server và transport của provider.
-- [x] Tạo UI tách biệt, responsive, semantic và không nhận raw API key.
-- [x] Tạo CI, test strategy, workflow, quality gates và project-memory protocol.
-- [x] Tạo Docker baseline chạy non-root.
+- clean architecture: domain, application, infrastructure, API;
+- upload PDF theo stream, signature/size guard, atomic write;
+- submit/get/cancel job có idempotency;
+- Azure Translator V3 và OpenAI-compatible provider;
+- protected-token validation;
+- UI foundation, CI và non-root Docker baseline;
+- Git-based project memory.
 
-### Bằng chứng hiện có
+M0 vẫn ở draft PR #1 vì manual desktop/mobile visual review chưa hoàn tất.
 
-- [x] `pytest`: 28 tests pass.
-- [x] Branch coverage cục bộ: 89.40%, vượt gate 85%.
-- [x] `python -m compileall` pass.
-- [x] `node --check frontend/app.js` pass.
-- [x] Editable package build/install pass bằng setuptools.
-- [x] Uvicorn smoke test: `/health/live` và static UI trả thành công.
-- [x] GitHub Actions run `33242200985`: Ruff lint/format, Mypy, tests/coverage và frontend syntax pass.
-- [x] Docker image build pass; runtime user được xác nhận non-root.
-- [ ] Manual visual review desktop/mobile; môi trường scaffold chưa tạo được screenshot Chromium đáng tin cậy.
+## M1 — Runner/worker foundation
 
-## Không được hiểu nhầm
+### Đã triển khai
 
-Milestone này là nền móng chạy được cho upload, provider contract và job orchestration; chưa phải engine dịch PDF hoàn chỉnh.
-Không đánh dấu production-ready trước khi hoàn thành M1–M4 trong `NEXT.md`.
+- [x] `TranslationRunner` và `PdfQualityGate` application contracts.
+- [x] Worker lifecycle từ queue đến atomic output publish.
+- [x] Progress state/percent có monotonic guard.
+- [x] Mapping `OCR_REQUIRED`, `NEEDS_REVIEW`, retryable và permanent failure.
+- [x] Queue consumer contract và local in-memory consumer.
+- [x] Object storage materialize/publish và path-traversal guard.
+- [x] Isolated subprocess runner có timeout/terminate/kill fallback.
+- [x] JSONL protocol: `progress`, `error`, `finish`.
+- [x] Engine manifest không chứa secrets.
+- [x] Lazy BabelDOC bridge để API image vẫn nhẹ.
+- [x] Provider-backed PDFMathTranslate-next translator contract.
+- [x] Azure/LLM provider factory cho child process.
+- [x] Basic structural PDF gate: source/output existence, signature, size và EOF marker.
+- [x] Upstream install script khóa đúng hai commit.
+- [x] Tài liệu `docs/engineering/ENGINE_INTEGRATION.md`.
+
+### Bằng chứng đã xác minh
+
+GitHub Actions run [`33243746819`](https://github.com/chiendeptraiBTEC/All_to_PDF/actions/runs/33243746819) trên code gate commit `7af93844531a287f8c6e7c0cc9f043426f7e9ef6`:
+
+- Ruff lint: pass;
+- Ruff format: pass;
+- Mypy strict: pass, 39 source files;
+- Pytest: **79 passed**;
+- Total coverage: **88.53%**, gate 85%;
+- frontend JavaScript syntax: pass;
+- Docker build: pass;
+- runtime non-root verification: pass.
+
+Các test mới bao phủ bridge thực qua fake upstream modules, worker state/failure paths, timeout/non-JSON/nonzero exit, provider factory, structural quality gate và atomic publication.
+
+## Chưa được đánh dấu hoàn thành
+
+- [ ] Cài pinned BabelDOC/PDFMathTranslate-next trong worker image thật.
+- [ ] Chạy fixture PDF có text layer EN→VI qua BabelDOC thật.
+- [ ] Xác minh output mở được, giữ số trang và có text tiếng Việt.
+- [ ] Lưu reproducible smoke artifact/report.
+- [ ] Chạy với Azure credential hoặc provider profile được phê duyệt.
+- [ ] PostgreSQL, Redis-compatible queue và S3-compatible storage.
+- [ ] Full structural/geometry/visual quality engine.
+- [ ] Readability guard `MIN_READABLE_SCALE`.
+- [ ] AGPL/legal gate và threat-model review.
+
+Không gọi sản phẩm production-ready trước khi các gate còn mở được hoàn tất.
