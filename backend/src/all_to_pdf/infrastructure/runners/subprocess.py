@@ -43,9 +43,7 @@ class BabelDocSubprocessRunner:
         timeout_seconds: float = 30 * 60,
         environment: Mapping[str, str] | None = None,
     ) -> None:
-        self._command = tuple(
-            command or (sys.executable, "-m", "all_to_pdf.engine.bridge")
-        )
+        self._command = tuple(command or (sys.executable, "-m", "all_to_pdf.engine.bridge"))
         self._timeout_seconds = timeout_seconds
         self._environment = dict(environment or {})
 
@@ -133,9 +131,7 @@ class BabelDocSubprocessRunner:
             raise reported_error
         if return_code != 0:
             detail = stderr[-1000:] if stderr else "no stderr detail"
-            raise EngineProcessError(
-                f"PDF engine exited with code {return_code}: {detail}"
-            )
+            raise EngineProcessError(f"PDF engine exited with code {return_code}: {detail}")
         if finish_payload is None:
             raise EngineProtocolError("engine exited successfully without a finish event")
 

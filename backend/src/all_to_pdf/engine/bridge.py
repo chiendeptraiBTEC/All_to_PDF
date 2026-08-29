@@ -97,10 +97,7 @@ def _normalized_status(stage: str) -> JobStatus:
         return JobStatus.TRANSLATING
     if "typesetting" in lowered:
         return JobStatus.TYPESETTING
-    if any(
-        token in lowered
-        for token in ("font", "drawing", "subset", "save pdf", "generate")
-    ):
+    if any(token in lowered for token in ("font", "drawing", "subset", "save pdf", "generate")):
         return JobStatus.GENERATING_PDF
     return JobStatus.PARSING
 
@@ -260,14 +257,12 @@ async def _translate(request: BridgeRequest) -> None:
                 "ENGINE_PROTOCOL_ERROR",
                 "BabelDOC completed without a translate_result",
             )
-        generated = (
-            getattr(finish_result, "no_watermark_mono_pdf_path", None)
-            or getattr(finish_result, "mono_pdf_path", None)
+        generated = getattr(finish_result, "no_watermark_mono_pdf_path", None) or getattr(
+            finish_result, "mono_pdf_path", None
         )
         generated_path = Path(generated) if generated is not None else None
-        generated_exists = (
-            generated_path is not None
-            and await asyncio.to_thread(generated_path.is_file)
+        generated_exists = generated_path is not None and await asyncio.to_thread(
+            generated_path.is_file
         )
         if not generated_exists or generated_path is None:
             raise BridgeFailure(

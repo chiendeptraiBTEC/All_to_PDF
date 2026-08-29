@@ -54,7 +54,9 @@ class OcrRunner:
         raise OcrRequiredError("fixture has no text layer")
 
 
-async def _submitted_job(tmp_path: Path) -> tuple[
+async def _submitted_job(
+    tmp_path: Path,
+) -> tuple[
     InMemoryJobRepository,
     InMemoryJobQueue,
     LocalObjectStorage,

@@ -96,9 +96,7 @@ class LocalObjectStorage:
         if not await asyncio.to_thread(source_path.is_file):
             raise FileNotFoundError(source_path)
         now = datetime.now(UTC)
-        relative_path = (
-            Path("outputs") / f"{now:%Y}" / f"{now:%m}" / f"{uuid4().hex}.pdf"
-        )
+        relative_path = Path("outputs") / f"{now:%Y}" / f"{now:%m}" / f"{uuid4().hex}.pdf"
         target = self._root / relative_path
         temporary = target.with_suffix(".pdf.part")
         await asyncio.to_thread(target.parent.mkdir, parents=True, exist_ok=True)
