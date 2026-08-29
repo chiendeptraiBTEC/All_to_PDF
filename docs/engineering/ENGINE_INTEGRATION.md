@@ -27,7 +27,7 @@ Benefits:
 Use `scripts/install_pdf_engine.sh`. PDFMathTranslate-next is installed with
 `--no-deps` because its selected commit declares `pymupdf<1.25.3`, while BabelDOC
 0.6.4 requires `pymupdf>=1.26.7`. The runtime imports only the PDFMathTranslate-next
-translator contract; BabelDOC owns the PDF dependency graph.
+translator contract; BabelDOC remains the source of truth for PDF dependencies.
 
 ## Protocol
 
@@ -45,9 +45,26 @@ Child events:
 Only `parsing`, `translating`, `typesetting` and `generating_pdf` may be emitted by
 the engine. The application owns preflight, quality review and final publication.
 
-## Verification status
+## Verification layers
 
-The subprocess protocol, state mapping, output publication and basic PDF gate have
-deterministic unit tests. A live BabelDOC EN-to-VI fixture still requires the heavy
-engine image and provider credentials; it remains an explicit M1 release gate rather
-than being represented as completed.
+### Deterministic unit/integration layer
+
+The subprocess protocol, state mapping, timeout/error handling, output publication,
+provider factory and basic PDF gate use fakes and do not require heavy PDF packages.
+This layer runs in the `quality` CI job and must keep coverage above 85%.
+
+### Real-engine smoke layer
+
+`scripts/smoke_pdf_engine.py` creates a real text-layer PDF with PyMuPDF, injects a
+deterministic EN-to-VI text provider and runs the production bridge against the
+pinned BabelDOC/PDFMathTranslate-next packages. It asserts:
+
+- the provider was called;
+- one finish event was emitted;
+- source/output page count matches;
+- Vietnamese target text appears in extracted output;
+- output artifacts and a checksum report are produced.
+
+The deterministic provider removes external API cost and credentials; it does not
+replace later Azure/LLM quality benchmarks. The CI `engine-smoke` job uploads the
+source PDF, translated PDF and JSON report as evidence.
