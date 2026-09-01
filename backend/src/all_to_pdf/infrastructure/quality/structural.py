@@ -115,9 +115,11 @@ class StructuralPdfQualityGate:
                     size = span.get("size")
                     if text.strip() and isinstance(size, (int, float)) and size > 0:
                         font_sizes.append(float(size))
+        media = page.mediabox
+        crop = page.cropbox
         return PageMetrics(
-            mediabox=tuple(float(value) for value in page.mediabox),
-            cropbox=tuple(float(value) for value in page.cropbox),
+            mediabox=(float(media[0]), float(media[1]), float(media[2]), float(media[3])),
+            cropbox=(float(crop[0]), float(crop[1]), float(crop[2]), float(crop[3])),
             rotation=int(page.rotation),
             text_characters=text_characters,
             image_count=len(page.get_images(full=True)),

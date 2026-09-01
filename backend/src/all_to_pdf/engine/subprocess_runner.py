@@ -12,7 +12,7 @@ import time
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TextIO
+from typing import IO
 
 from all_to_pdf.engine.errors import (
     EngineCancelledError,
@@ -47,11 +47,7 @@ class SubprocessRunnerConfig:
 
 
 class SubprocessTranslationRunner:
-    """Runs the heavy PDF engine in a replaceable child process.
-
-    The child writes versioned JSON Lines to stdout. Stderr is diagnostic only and
-    is capped before inclusion in errors so a broken engine cannot exhaust memory.
-    """
+    """Runs the heavy PDF engine in a replaceable child process."""
 
     def __init__(self, config: SubprocessRunnerConfig) -> None:
         self._config = config
@@ -211,7 +207,7 @@ class SubprocessTranslationRunner:
             process.wait(timeout=self._config.terminate_grace_seconds)
 
 
-def _start_reader(stream: TextIO, target: queue.Queue[str | object]) -> threading.Thread:
+def _start_reader(stream: IO[str], target: queue.Queue[str | object]) -> threading.Thread:
     def read_stream() -> None:
         try:
             for line in stream:

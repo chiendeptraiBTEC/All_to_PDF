@@ -143,7 +143,8 @@ class PostgresJobRepository:
     async def healthcheck(self) -> bool:
         try:
             pool = await self._ensure_schema()
-            return await pool.fetchval("SELECT 1") == 1
+            result = await pool.fetchval("SELECT 1")
+            return bool(result == 1)
         except Exception:
             return False
 

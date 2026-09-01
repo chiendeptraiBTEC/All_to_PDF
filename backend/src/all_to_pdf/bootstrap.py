@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from all_to_pdf.application.engine import PdfQualityGate
 from all_to_pdf.application.jobs import (
     CancelTranslationJob,
     GetTranslationJob,
@@ -117,6 +118,7 @@ def build_worker(container: Container) -> WorkerContainer:
         timeout_seconds=container.settings.engine_timeout_seconds,
         environment=container.settings.engine_environment(),
     )
+    quality_gate: PdfQualityGate
     if container.settings.quality_mode == "structural":
         quality_gate = StructuralPdfQualityGate(
             minimum_readable_scale=container.settings.min_readable_scale
