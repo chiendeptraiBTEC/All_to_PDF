@@ -213,8 +213,7 @@ def _build_translation_config(
     signature = inspect.signature(config_class)
     parameters = signature.parameters
     accepts_arbitrary_keywords = any(
-        parameter.kind is inspect.Parameter.VAR_KEYWORD
-        for parameter in parameters.values()
+        parameter.kind is inspect.Parameter.VAR_KEYWORD for parameter in parameters.values()
     )
     kwargs = (
         candidates

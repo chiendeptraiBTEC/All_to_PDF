@@ -159,9 +159,7 @@ class SubprocessTranslationRunner:
                 detail = f"{detail}: {diagnostics}"
             raise EngineProtocolError(detail)
         if not result.output_pdf.is_file():
-            raise EngineProtocolError(
-                f"engine reported a missing output PDF: {result.output_pdf}"
-            )
+            raise EngineProtocolError(f"engine reported a missing output PDF: {result.output_pdf}")
         return result
 
     def _drain_stdout(

@@ -137,11 +137,7 @@ class ProcessTranslationJob:
                 exc,
             )
         except TranslationEngineError as exc:
-            status = (
-                JobStatus.FAILED_RETRYABLE
-                if exc.retryable
-                else JobStatus.FAILED_PERMANENT
-            )
+            status = JobStatus.FAILED_RETRYABLE if exc.retryable else JobStatus.FAILED_PERMANENT
             return await self._mark_failure(job_id, status, exc.code, str(exc))
         except Exception as exc:
             logger.exception("Unexpected worker failure", extra={"job_id": job_id})

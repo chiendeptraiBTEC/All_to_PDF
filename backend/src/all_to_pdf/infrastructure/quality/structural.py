@@ -87,10 +87,7 @@ class StructuralPdfQualityGate:
         left: tuple[float, float, float, float],
         right: tuple[float, float, float, float],
     ) -> bool:
-        return all(
-            abs(a - b) <= self._geometry_tolerance
-            for a, b in zip(left, right, strict=True)
-        )
+        return all(abs(a - b) <= self._geometry_tolerance for a, b in zip(left, right, strict=True))
 
     @staticmethod
     def _raise(number: int, message: str, code: str) -> None:

@@ -56,9 +56,7 @@ def build_container(settings: Settings | None = None) -> Container:
     resolved = settings or Settings()
     if resolved.persistence_backend == "memory":
         repository: JobRepository = InMemoryJobRepository()
-        queue: WorkerQueue = InMemoryJobQueue(
-            max_retries=resolved.queue_max_retries
-        )
+        queue: WorkerQueue = InMemoryJobQueue(max_retries=resolved.queue_max_retries)
         storage: ObjectStorage = LocalObjectStorage(
             resolved.local_storage_directory,
             max_upload_bytes=resolved.max_upload_bytes,
@@ -98,9 +96,7 @@ def build_container(settings: Settings | None = None) -> Container:
         storage = s3
         download_urls = s3
     else:
-        raise ValueError(
-            "ATP_PERSISTENCE_BACKEND must be 'memory' or 'production'"
-        )
+        raise ValueError("ATP_PERSISTENCE_BACKEND must be 'memory' or 'production'")
 
     return Container(
         settings=resolved,

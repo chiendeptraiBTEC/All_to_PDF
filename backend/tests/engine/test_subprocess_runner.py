@@ -38,8 +38,7 @@ def _script(tmp_path: Path, body: str) -> Path:
         "import argparse, json, pathlib, shutil, sys, time\n"
         "parser=argparse.ArgumentParser(); parser.add_argument('--request'); "
         "args=parser.parse_args()\n"
-        "request=json.loads(pathlib.Path(args.request).read_text())\n"
-        + body,
+        "request=json.loads(pathlib.Path(args.request).read_text())\n" + body,
         encoding="utf-8",
     )
     return path
