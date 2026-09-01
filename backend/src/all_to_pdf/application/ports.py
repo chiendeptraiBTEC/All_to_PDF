@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterable
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Protocol
 
 from all_to_pdf.domain.job import TranslationJob
@@ -20,9 +21,40 @@ class JobRepository(Protocol):
 
     async def save(self, job: TranslationJob) -> None: ...
 
+    async def healthcheck(self) -> bool: ...
+
+    async def close(self) -> None: ...
+
 
 class JobQueue(Protocol):
     async def enqueue(self, job_id: str) -> None: ...
+
+    async def healthcheck(self) -> bool: ...
+
+    async def close(self) -> None: ...
+
+
+@dataclass(frozen=True, slots=True)
+class QueueMessage:
+    job_id: str
+    receipt: str
+    attempt: int = 0
+
+
+class JobQueueConsumer(Protocol):
+    async def dequeue(self) -> QueueMessage: ...
+
+    async def acknowledge(self, message: QueueMessage) -> None: ...
+
+    async def retry(self, message: QueueMessage) -> bool:
+        """Requeue and return True, or dead-letter and return False."""
+        ...
+
+    async def heartbeat(self, message: QueueMessage) -> None: ...
+
+
+class WorkerQueue(JobQueue, JobQueueConsumer, Protocol):
+    """Combined local interface; production may split producer and consumer clients."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,4 +74,17 @@ class ObjectStorage(Protocol):
         content_type: str,
     ) -> StoredObject: ...
 
+    async def materialize_pdf(self, key: str, destination: Path) -> Path: ...
+
+    async def publish_pdf(
+        self,
+        source_path: Path,
+        *,
+        original_filename: str,
+    ) -> StoredObject: ...
+
     async def healthcheck(self) -> bool: ...
+
+
+class DownloadUrlProvider(Protocol):
+    async def create_download_url(self, key: str, *, expires_seconds: int) -> str: ...

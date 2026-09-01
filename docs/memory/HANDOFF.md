@@ -1,36 +1,63 @@
-# Engineering handoff
+# Handoff
 
-**Cập nhật:** 2026-08-29  
-**Milestone:** M0 — Production foundation
+## Hiện trạng bàn giao
 
-## Trạng thái xác minh
+- Branch: `feat/m1-babeldoc-runner`
+- Draft PR: [#2](https://github.com/chiendeptraiBTEC/All_to_PDF/pull/2)
+- Base: `feat/production-foundation`
+- Verified code gate: `7af93844531a287f8c6e7c0cc9f043426f7e9ef6`
+- Verified workflow: [`33243746819`](https://github.com/chiendeptraiBTEC/All_to_PDF/actions/runs/33243746819)
 
-- 28 test cục bộ pass.
-- Branch coverage cục bộ: 89.40%; hard gate hiện tại là 85%.
-- `python -m compileall` pass.
-- `node --check frontend/app.js` pass.
-- Editable package build/install pass.
-- Uvicorn smoke test pass cho `/health/live` và giao diện `/`.
-- GitHub Actions run `33242200985` pass toàn bộ quality job và container job.
-- Ruff lint/format, Mypy strict, tests/coverage, JavaScript syntax, Docker build và non-root verification đều pass trên CI.
-- Headless Chromium trong môi trường scaffold không tạo được screenshot ổn định; manual visual QA vẫn là merge gate chưa hoàn tất.
+## Điều đã chạy được và được test
 
-## Những gì M0 thực sự cung cấp
+- job queue consumer → worker → fake engine → quality gate → atomic output publish;
+- progress/status updates và failure classifications;
+- subprocess JSONL success/error/timeout/malformed/nonzero-exit paths;
+- engine bridge orchestration với fake BabelDOC/PDFMath modules;
+- Azure/LLM provider factory;
+- basic structural PDF gate;
+- API/UI regression suite từ M0;
+- Docker base image và non-root runtime.
 
-- Clean architecture và dependency direction rõ.
-- Upload PDF streaming có size/signature guard và atomic publish.
-- Job state machine, idempotent submit, get và cancel.
-- Azure Translator V3 và OpenAI-compatible provider adapter.
-- Protected-token validation có kiểm tra đầy đủ số lượng và thứ tự.
-- Translation Studio responsive, không thu raw API key.
-- CI, Docker non-root baseline, test strategy, security baseline và Git-based project memory.
+## Điều chưa được chứng minh
 
-## Những gì chưa được phép gọi là production-ready
+- selected upstream commits cài và chạy cùng nhau trong worker image;
+- real BabelDOC layout/model/assets trên fixture PDF;
+- text tiếng Việt thật trong mono output;
+- Azure credential path end-to-end;
+- layout quality, readability, tables/formulas và resource usage.
 
-- Chưa có BabelDOC/PDFMathTranslate-next worker end-to-end.
-- Chưa có PostgreSQL, Redis-compatible queue hoặc S3-compatible storage.
-- Chưa có quality engine cho PDF output.
-- Chưa benchmark Azure/LLM trên corpus English → Vietnamese.
-- Chưa hoàn tất AGPL/legal gate, threat model và visual accessibility review.
+## Local commands
 
-Đường găng tiếp theo là M1 trong `NEXT.md`: worker + BabelDOC runner + một fixture PDF end-to-end có artifact kiểm định.
+```bash
+python -m pip install -e ".[dev]"
+make check
+```
+
+Cài engine nặng:
+
+```bash
+./scripts/install_pdf_engine.sh
+```
+
+Chạy API local không worker:
+
+```bash
+make run
+```
+
+Chạy local với embedded worker sau khi engine đã cài:
+
+```bash
+ATP_EMBEDDED_WORKER_ENABLED=true \
+ATP_AZURE_TRANSLATOR_API_KEY=... \
+uvicorn all_to_pdf.main:app --app-dir backend/src --reload
+```
+
+## Quy tắc tiếp tục
+
+1. Đọc `CONTEXT.md`, `PROGRESS.md`, `NEXT.md`, `RISKS.md`.
+2. Không merge PR #2 trước live engine smoke.
+3. Không ghi credential vào Git, manifest hoặc command arguments.
+4. Không hạ coverage gate; test behavior mới.
+5. Mọi tuyên bố hoàn thành phải trỏ tới CI run/artifact.

@@ -1,14 +1,103 @@
 services:
-  app:
-    build: .
-    environment:
-      ATP_ENVIRONMENT: development
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment: &app-env
+      ATP_ENVIRONMENT: production
+      ATP_PERSISTENCE_BACKEND: production
       ATP_WEB_DIRECTORY: /app/frontend
-      ATP_LOCAL_STORAGE_DIRECTORY: /app/var/storage
+      ATP_WORKING_DIRECTORY: /app/var/work
+      ATP_DATABASE_URL: postgresql://alltopdf:alltopdf@postgres:5432/alltopdf
+      ATP_REDIS_URL: redis://redis:6379/0
+      ATP_S3_ENDPOINT_URL: http://minio:9000
+      ATP_S3_BUCKET: all-to-pdf
+      ATP_S3_REGION: us-east-1
+      ATP_S3_ACCESS_KEY_ID: alltopdf
+      ATP_S3_SECRET_ACCESS_KEY: alltopdf-secret
+      ATP_QUALITY_MODE: structural
+      ATP_EMBEDDED_WORKER_ENABLED: "false"
     ports:
       - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    environment:
+      <<: *app-env
+      ATP_THIRD_PARTY_LICENSE_ACKNOWLEDGED: ${ATP_THIRD_PARTY_LICENSE_ACKNOWLEDGED:-false}
+      ATP_AZURE_TRANSLATOR_API_KEY: ${ATP_AZURE_TRANSLATOR_API_KEY:-}
+      ATP_AZURE_TRANSLATOR_REGION: ${ATP_AZURE_TRANSLATOR_REGION:-}
+      ATP_LLM_BASE_URL: ${ATP_LLM_BASE_URL:-}
+      ATP_LLM_API_KEY: ${ATP_LLM_API_KEY:-}
+      ATP_LLM_MODEL: ${ATP_LLM_MODEL:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
     volumes:
-      - app-data:/app/var
+      - worker-cache:/home/app/.cache
+
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: alltopdf
+      POSTGRES_USER: alltopdf
+      POSTGRES_PASSWORD: alltopdf
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U alltopdf -d alltopdf"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - redis-data:/data
+
+  minio:
+    image: quay.io/minio/minio:latest
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: alltopdf
+      MINIO_ROOT_PASSWORD: alltopdf-secret
+    ports:
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+
+  minio-init:
+    image: quay.io/minio/mc:latest
+    depends_on:
+      - minio
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        until mc alias set local http://minio:9000 alltopdf alltopdf-secret; do sleep 1; done
+        mc mb --ignore-existing local/all-to-pdf
 
 volumes:
-  app-data:
+  postgres-data:
+  redis-data:
+  minio-data:
+  worker-cache:

@@ -3,36 +3,43 @@
 **Snapshot:** 2026-08-29  
 **Repository:** `chiendeptraiBTEC/All_to_PDF`
 
-## Pull request
+## Pull requests
+
+### PR #1 — M0 foundation
 
 - Branch: `feat/production-foundation`
-- Draft PR: [#1 — feat: bootstrap production foundation](https://github.com/chiendeptraiBTEC/All_to_PDF/pull/1)
-- Base: `main` at `01f354aa811194c2677a746a9316d65ab37c2e22`
-- Code gate commit: `707abbca21791af800d1b0674cdd492e3ba5ab34`
-- PR remains draft because manual desktop/mobile visual review is still open.
+- URL: https://github.com/chiendeptraiBTEC/All_to_PDF/pull/1
+- State: draft, open.
+- Open gate: manual visual review desktop/mobile.
 
-## Verified GitHub Actions gate
+### PR #2 — M1 runner/worker
 
-Workflow run [`33242200985`](https://github.com/chiendeptraiBTEC/All_to_PDF/actions/runs/33242200985) completed successfully for code gate commit `707abbca21791af800d1b0674cdd492e3ba5ab34`.
+- Branch: `feat/m1-babeldoc-runner`
+- Base: `feat/production-foundation`
+- URL: https://github.com/chiendeptraiBTEC/All_to_PDF/pull/2
+- State: draft, open.
+- Verified code gate commit: `7af93844531a287f8c6e7c0cc9f043426f7e9ef6`.
 
-### `quality` job — passed
+## Verified GitHub Actions
+
+Workflow run [`33243746819`](https://github.com/chiendeptraiBTEC/All_to_PDF/actions/runs/33243746819):
+
+### `quality` — passed
 
 - dependency installation;
-- Ruff lint;
-- Ruff format check;
-- Mypy strict type check;
-- Pytest and coverage gate;
-- frontend JavaScript syntax check.
+- Ruff lint and format;
+- Mypy strict, 39 source files;
+- Pytest: 79 passed;
+- coverage: 88.53%, gate 85%;
+- frontend JavaScript syntax.
 
-### `container` job — passed
+### `container` — passed
 
 - Docker image build;
-- runtime user verified as non-root.
+- runtime user verified non-root.
 
-## Open merge gate
+## Open M1 merge gate
 
-Manual visual review at desktop and mobile widths remains open. The PR must not be marked ready or merged until the UI is inspected in a reliable browser environment and any findings are recorded.
+A live smoke test must install the pinned BabelDOC/PDFMathTranslate-next commits and translate a real text-layer PDF fixture to Vietnamese. Deterministic fake-engine tests are necessary but not sufficient.
 
-## Status-file note
-
-This snapshot is written in a follow-up documentation commit. That commit also runs the same CI workflow; GitHub Actions and PR checks remain the source of truth for its latest status.
+This status file is a documentation follow-up. GitHub Actions on the current PR head remains the source of truth after this commit.

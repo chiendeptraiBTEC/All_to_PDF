@@ -1,0 +1,30 @@
+FROM python:3.12-slim AS runtime
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    HOME=/home/app
+
+WORKDIR /app
+
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends \
+        git libgl1 libglib2.0-0 libfreetype6 \
+    && rm -rf /var/lib/apt/lists/* \
+    && addgroup --system app \
+    && adduser --system --ingroup app --home /home/app app
+
+COPY pyproject.toml README.md ./
+COPY requirements ./requirements
+COPY backend ./backend
+COPY scripts ./scripts
+
+RUN python -m pip install --upgrade pip \
+    && python -m pip install ".[production]" \
+    && python -m pip install -r requirements/pdf-engine.lock.txt
+
+RUN mkdir -p /app/var/work /home/app/.cache \
+    && chown -R app:app /app /home/app
+USER app
+
+CMD ["all-to-pdf-worker"]

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import shutil
 from collections.abc import AsyncIterable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -78,8 +79,56 @@ class LocalObjectStorage:
             original_filename=Path(original_filename).name or "document.pdf",
         )
 
+    async def materialize_pdf(self, key: str, destination: Path) -> Path:
+        source = await asyncio.to_thread(self._resolve_key, key)
+        if not await asyncio.to_thread(source.is_file):
+            raise FileNotFoundError(f"object does not exist: {key}")
+        await asyncio.to_thread(destination.parent.mkdir, parents=True, exist_ok=True)
+        await asyncio.to_thread(shutil.copyfile, source, destination)
+        return destination
+
+    async def publish_pdf(
+        self,
+        source_path: Path,
+        *,
+        original_filename: str,
+    ) -> StoredObject:
+        if not await asyncio.to_thread(source_path.is_file):
+            raise FileNotFoundError(source_path)
+        now = datetime.now(UTC)
+        relative_path = Path("outputs") / f"{now:%Y}" / f"{now:%m}" / f"{uuid4().hex}.pdf"
+        target = self._root / relative_path
+        temporary = target.with_suffix(".pdf.part")
+        await asyncio.to_thread(target.parent.mkdir, parents=True, exist_ok=True)
+        try:
+            await asyncio.to_thread(shutil.copyfile, source_path, temporary)
+            await asyncio.to_thread(self._fsync_file, temporary)
+            await asyncio.to_thread(temporary.replace, target)
+        except Exception:
+            await asyncio.to_thread(temporary.unlink, missing_ok=True)
+            raise
+        size_bytes = await asyncio.to_thread(lambda: target.stat().st_size)
+        return StoredObject(
+            key=relative_path.as_posix(),
+            size_bytes=size_bytes,
+            content_type="application/pdf",
+            original_filename=Path(original_filename).name or "translated.pdf",
+        )
+
     async def healthcheck(self) -> bool:
         return await asyncio.to_thread(self._healthcheck_sync)
+
+    def _resolve_key(self, key: str) -> Path:
+        root = self._root.resolve()
+        candidate = (root / Path(key)).resolve()
+        if not candidate.is_relative_to(root):
+            raise ValueError("object key escapes the configured storage root")
+        return candidate
+
+    @staticmethod
+    def _fsync_file(path: Path) -> None:
+        with path.open("rb") as stream:
+            os.fsync(stream.fileno())
 
     def _healthcheck_sync(self) -> bool:
         try:

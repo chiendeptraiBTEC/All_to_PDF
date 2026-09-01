@@ -1,10 +1,14 @@
-"""Thread-safe in-memory repository for local development and tests."""
+"""Thread-safe repository with optimistic concurrency for local development."""
 
 from __future__ import annotations
 
 import asyncio
 
-from all_to_pdf.domain.job import TranslationJob
+from all_to_pdf.domain.job import JobStatus, TranslationJob
+
+
+class ConcurrentJobUpdateError(RuntimeError):
+    pass
 
 
 class InMemoryJobRepository:
@@ -28,6 +32,20 @@ class InMemoryJobRepository:
 
     async def save(self, job: TranslationJob) -> None:
         async with self._lock:
-            if job.id not in self._jobs:
+            current = self._jobs.get(job.id)
+            if current is None:
                 raise KeyError(f"job does not exist: {job.id}")
+            if current.revision != job.revision - 1:
+                if current.status is JobStatus.CANCELLED:
+                    return
+                raise ConcurrentJobUpdateError(
+                    f"stale job revision for {job.id}: "
+                    f"stored={current.revision}, attempted={job.revision}"
+                )
             self._jobs[job.id] = job
+
+    async def healthcheck(self) -> bool:
+        return True
+
+    async def close(self) -> None:
+        return None
