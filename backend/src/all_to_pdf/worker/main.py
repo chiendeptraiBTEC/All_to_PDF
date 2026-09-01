@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import signal
+from contextlib import suppress
 
 from all_to_pdf.bootstrap import build_container, build_worker
 from all_to_pdf.config import Settings
@@ -19,10 +20,8 @@ async def serve() -> None:
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
-        try:
+        with suppress(NotImplementedError):
             loop.add_signal_handler(sig, stop.set)
-        except NotImplementedError:
-            pass
     task = asyncio.create_task(
         worker.process_job.run_forever(container.queue),
         name="translation-worker",

@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Mapping
 
 from all_to_pdf.engine.errors import EngineProtocolError
 from all_to_pdf.engine.models import EngineProgress, EngineResult
@@ -35,10 +35,7 @@ def result_line(result: EngineResult) -> str:
 
 
 def error_line(*, code: str, message: str, retryable: bool) -> str:
-    return _encode(
-        "error",
-        {"code": code, "message": message, "retryable": retryable},
-    )
+    return _encode("error", {"code": code, "message": message, "retryable": retryable})
 
 
 def parse_line(line: str) -> ParsedMessage:
@@ -48,7 +45,6 @@ def parse_line(line: str) -> ParsedMessage:
         raise EngineProtocolError("engine emitted invalid JSON") from exc
     if not isinstance(decoded, Mapping):
         raise EngineProtocolError("engine message must be a JSON object")
-
     version = decoded.get("version")
     if version != PROTOCOL_VERSION:
         raise EngineProtocolError(f"unsupported engine protocol version: {version!r}")
@@ -56,7 +52,6 @@ def parse_line(line: str) -> ParsedMessage:
     payload = decoded.get("payload")
     if not isinstance(message_type, str) or not isinstance(payload, Mapping):
         raise EngineProtocolError("engine message requires string type and object payload")
-
     try:
         if message_type == "progress":
             return ParsedMessage(progress=EngineProgress.from_payload(payload))
@@ -73,7 +68,6 @@ def parse_line(line: str) -> ParsedMessage:
             return ParsedMessage(failure=EngineFailure(code, message, retryable))
     except (TypeError, ValueError) as exc:
         raise EngineProtocolError(f"invalid {message_type} payload: {exc}") from exc
-
     raise EngineProtocolError(f"unknown engine message type: {message_type}")
 
 

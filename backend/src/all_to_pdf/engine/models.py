@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
-from typing import Mapping
 
 
 class EngineStage(StrEnum):
@@ -73,7 +73,6 @@ class EngineRequest:
             if not isinstance(key, str) or not isinstance(value, str):
                 raise ValueError("metadata keys and values must be strings")
             metadata[key] = value
-
         return cls(
             job_id=_required_string(payload, "job_id"),
             input_pdf=Path(_required_string(payload, "input_pdf")),

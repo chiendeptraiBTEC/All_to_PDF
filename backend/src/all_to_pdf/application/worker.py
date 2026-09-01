@@ -17,7 +17,12 @@ from all_to_pdf.application.engine import (
     TranslationRunner,
     TranslationRunRequest,
 )
-from all_to_pdf.application.ports import JobQueueConsumer, JobRepository, ObjectStorage, QueueMessage
+from all_to_pdf.application.ports import (
+    JobQueueConsumer,
+    JobRepository,
+    ObjectStorage,
+    QueueMessage,
+)
 from all_to_pdf.domain.job import JobStatus, TranslationJob
 
 logger = logging.getLogger(__name__)
@@ -32,7 +37,12 @@ _PIPELINE = (
     JobStatus.QUALITY_CHECK,
 )
 _ENGINE_STATUSES = frozenset(
-    {JobStatus.PARSING, JobStatus.TRANSLATING, JobStatus.TYPESETTING, JobStatus.GENERATING_PDF}
+    {
+        JobStatus.PARSING,
+        JobStatus.TRANSLATING,
+        JobStatus.TYPESETTING,
+        JobStatus.GENERATING_PDF,
+    }
 )
 
 
@@ -70,7 +80,11 @@ class ProcessTranslationJob:
                 job = job.queue()
                 await self._repository.save(job)
             job = await self._advance_to(job, JobStatus.PREFLIGHT)
-            await asyncio.to_thread(self._workspace_root.mkdir, parents=True, exist_ok=True)
+            await asyncio.to_thread(
+                self._workspace_root.mkdir,
+                parents=True,
+                exist_ok=True,
+            )
             with tempfile.TemporaryDirectory(
                 prefix=f"job-{job.id}-",
                 dir=self._workspace_root,
@@ -111,11 +125,23 @@ class ProcessTranslationJob:
         except WorkerCancelled:
             return await self._require_job(job_id)
         except OcrRequiredError as exc:
-            return await self._mark_special_terminal(job_id, JobStatus.OCR_REQUIRED, exc)
+            return await self._mark_special_terminal(
+                job_id,
+                JobStatus.OCR_REQUIRED,
+                exc,
+            )
         except ReviewRequiredError as exc:
-            return await self._mark_special_terminal(job_id, JobStatus.NEEDS_REVIEW, exc)
+            return await self._mark_special_terminal(
+                job_id,
+                JobStatus.NEEDS_REVIEW,
+                exc,
+            )
         except TranslationEngineError as exc:
-            status = JobStatus.FAILED_RETRYABLE if exc.retryable else JobStatus.FAILED_PERMANENT
+            status = (
+                JobStatus.FAILED_RETRYABLE
+                if exc.retryable
+                else JobStatus.FAILED_PERMANENT
+            )
             return await self._mark_failure(job_id, status, exc.code, str(exc))
         except Exception as exc:
             logger.exception("Unexpected worker failure", extra={"job_id": job_id})
@@ -161,12 +187,20 @@ class ProcessTranslationJob:
                 logger.exception("Worker iteration failed")
                 await asyncio.sleep(1)
 
-    async def _heartbeat(self, queue: JobQueueConsumer, message: QueueMessage) -> None:
+    async def _heartbeat(
+        self,
+        queue: JobQueueConsumer,
+        message: QueueMessage,
+    ) -> None:
         while True:
             await asyncio.sleep(self._queue_heartbeat_seconds)
             await queue.heartbeat(message)
 
-    async def _record_engine_progress(self, job_id: str, progress: EngineProgress) -> None:
+    async def _record_engine_progress(
+        self,
+        job_id: str,
+        progress: EngineProgress,
+    ) -> None:
         if progress.status not in _ENGINE_STATUSES:
             raise TranslationEngineError(
                 f"engine emitted unsupported worker status: {progress.status}",
@@ -180,7 +214,11 @@ class ProcessTranslationJob:
         )
         await self._repository.save(updated)
 
-    async def _advance_to(self, job: TranslationJob, target: JobStatus) -> TranslationJob:
+    async def _advance_to(
+        self,
+        job: TranslationJob,
+        target: JobStatus,
+    ) -> TranslationJob:
         if job.status is target:
             return job
         try:

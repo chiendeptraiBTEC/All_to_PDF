@@ -6,8 +6,8 @@ import argparse
 import json
 import logging
 import sys
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Mapping
 
 from all_to_pdf.engine.babeldoc_driver import BabelDocDriver
 from all_to_pdf.engine.errors import EngineError

@@ -3,8 +3,10 @@ from dataclasses import replace
 import pytest
 
 from all_to_pdf.application.engine import ReviewRequiredError
-from all_to_pdf.infrastructure.quality.structural import PageMetrics, StructuralPdfQualityGate
-
+from all_to_pdf.infrastructure.quality.structural import (
+    PageMetrics,
+    StructuralPdfQualityGate,
+)
 
 _BASE = PageMetrics(
     mediabox=(0.0, 0.0, 595.0, 842.0),
@@ -19,11 +21,7 @@ _BASE = PageMetrics(
 
 def test_structural_gate_accepts_readable_text_and_small_geometry_noise() -> None:
     gate = StructuralPdfQualityGate(minimum_readable_scale=0.62)
-    output = replace(
-        _BASE,
-        mediabox=(0.1, 0.0, 595.2, 842.0),
-        median_font_size=8.0,
-    )
+    output = replace(_BASE, mediabox=(0.1, 0.0, 595.2, 842.0), median_font_size=8.0)
     gate._compare((_BASE,), (output,))
 
 
