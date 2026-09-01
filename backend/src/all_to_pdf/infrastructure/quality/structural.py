@@ -76,7 +76,11 @@ class StructuralPdfQualityGate:
         if source.median_font_size and output.median_font_size:
             scale = output.median_font_size / source.median_font_size
             if scale < self._minimum_readable_scale:
-                self._raise(number, f"median text scale dropped to {scale:.3f}", "OUTPUT_TEXT_TOO_SMALL")
+                self._raise(
+                    number,
+                    f"median text scale dropped to {scale:.3f}",
+                    "OUTPUT_TEXT_TOO_SMALL",
+                )
 
     def _boxes_close(
         self,
