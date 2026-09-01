@@ -1,7 +1,7 @@
 """Domain model for PDF translation jobs.
 
-This module contains no framework or database code. It is intentionally small so a
-new developer can understand the job lifecycle before reading the API adapters.
+This module contains no framework or database code. The revision field provides the
+compare-and-set token used by production repositories.
 """
 
 from __future__ import annotations
@@ -33,7 +33,6 @@ class JobStatus(StrEnum):
             self.SUCCEEDED,
             self.OCR_REQUIRED,
             self.NEEDS_REVIEW,
-            self.FAILED_RETRYABLE,
             self.FAILED_PERMANENT,
             self.CANCELLED,
         }
@@ -105,6 +104,9 @@ _ALLOWED_TRANSITIONS: dict[JobStatus, frozenset[JobStatus]] = {
             JobStatus.CANCELLED,
         }
     ),
+    JobStatus.FAILED_RETRYABLE: frozenset(
+        {JobStatus.QUEUED, JobStatus.FAILED_PERMANENT, JobStatus.CANCELLED}
+    ),
 }
 
 _PROGRESS_FLOOR: dict[JobStatus, float] = {
@@ -138,6 +140,7 @@ class TranslationJob:
     output_object_key: str | None = None
     failure_code: str | None = None
     failure_message: str | None = None
+    revision: int = 0
 
     @classmethod
     def create(
@@ -203,6 +206,7 @@ class TranslationJob:
             output_object_key=output_object_key or self.output_object_key,
             failure_code=failure_code,
             failure_message=failure_message,
+            revision=self.revision + 1,
         )
 
     def record_progress(
@@ -225,9 +229,15 @@ class TranslationJob:
             progress_percent=percent,
             progress_stage=stage.strip()[:200],
             updated_at=now or datetime.now(UTC),
+            revision=self.revision + 1,
         )
 
     def queue(self, *, now: datetime | None = None) -> TranslationJob:
+        return self.transition_to(JobStatus.QUEUED, now=now)
+
+    def retry(self, *, now: datetime | None = None) -> TranslationJob:
+        if self.status is not JobStatus.FAILED_RETRYABLE:
+            raise InvalidJobTransition("only retryable failures can be queued again")
         return self.transition_to(JobStatus.QUEUED, now=now)
 
     def cancel(self, *, now: datetime | None = None) -> TranslationJob:

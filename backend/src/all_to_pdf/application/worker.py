@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import tempfile
+from contextlib import suppress
 from pathlib import Path
 
 from all_to_pdf.application.engine import (
@@ -16,7 +17,7 @@ from all_to_pdf.application.engine import (
     TranslationRunner,
     TranslationRunRequest,
 )
-from all_to_pdf.application.ports import JobQueueConsumer, JobRepository, ObjectStorage
+from all_to_pdf.application.ports import JobQueueConsumer, JobRepository, ObjectStorage, QueueMessage
 from all_to_pdf.domain.job import JobStatus, TranslationJob
 
 logger = logging.getLogger(__name__)
@@ -31,17 +32,12 @@ _PIPELINE = (
     JobStatus.QUALITY_CHECK,
 )
 _ENGINE_STATUSES = frozenset(
-    {
-        JobStatus.PARSING,
-        JobStatus.TRANSLATING,
-        JobStatus.TYPESETTING,
-        JobStatus.GENERATING_PDF,
-    }
+    {JobStatus.PARSING, JobStatus.TRANSLATING, JobStatus.TYPESETTING, JobStatus.GENERATING_PDF}
 )
 
 
 class WorkerCancelled(RuntimeError):
-    """Internal control-flow exception used to stop an active engine process."""
+    pass
 
 
 class ProcessTranslationJob:
@@ -53,24 +49,27 @@ class ProcessTranslationJob:
         quality_gate: PdfQualityGate,
         *,
         workspace_root: Path,
+        queue_heartbeat_seconds: float = 30.0,
     ) -> None:
         self._repository = repository
         self._storage = storage
         self._runner = runner
         self._quality_gate = quality_gate
         self._workspace_root = workspace_root
+        self._queue_heartbeat_seconds = max(1.0, queue_heartbeat_seconds)
 
     async def execute(self, job_id: str) -> TranslationJob:
         job = await self._require_job(job_id)
         if job.status.is_terminal:
             return job
-
         try:
+            if job.status is JobStatus.FAILED_RETRYABLE:
+                job = job.retry()
+                await self._repository.save(job)
             if job.status is JobStatus.UPLOADED:
                 job = job.queue()
                 await self._repository.save(job)
             job = await self._advance_to(job, JobStatus.PREFLIGHT)
-
             await asyncio.to_thread(self._workspace_root.mkdir, parents=True, exist_ok=True)
             with tempfile.TemporaryDirectory(
                 prefix=f"job-{job.id}-",
@@ -81,17 +80,15 @@ class ProcessTranslationJob:
                     job.input_object_key,
                     workspace / "source.pdf",
                 )
-                output_path = workspace / "translated.pdf"
                 request = TranslationRunRequest(
                     input_path=input_path,
-                    output_path=output_path,
+                    output_path=workspace / "translated.pdf",
                     workspace=workspace,
                     source_language=job.source_language,
                     target_language=job.target_language,
                     translator_profile=job.translator_profile,
                     llm_profile_id=job.llm_profile_id,
                 )
-
                 result = await self._runner.run(
                     request,
                     lambda progress: self._record_engine_progress(job.id, progress),
@@ -104,7 +101,6 @@ class ProcessTranslationJob:
                     result.output_path,
                     original_filename=f"{job.id}.pdf",
                 )
-
             job = await self._require_active_job(job.id)
             completed = job.transition_to(
                 JobStatus.SUCCEEDED,
@@ -121,7 +117,7 @@ class ProcessTranslationJob:
         except TranslationEngineError as exc:
             status = JobStatus.FAILED_RETRYABLE if exc.retryable else JobStatus.FAILED_PERMANENT
             return await self._mark_failure(job_id, status, exc.code, str(exc))
-        except Exception as exc:  # defensive boundary: the queue retry policy handles the attempt
+        except Exception as exc:
             logger.exception("Unexpected worker failure", extra={"job_id": job_id})
             return await self._mark_failure(
                 job_id,
@@ -131,15 +127,44 @@ class ProcessTranslationJob:
             )
 
     async def run_once(self, queue: JobQueueConsumer) -> TranslationJob:
-        job_id = await queue.dequeue()
+        message = await queue.dequeue()
+        heartbeat = asyncio.create_task(
+            self._heartbeat(queue, message),
+            name=f"queue-heartbeat-{message.job_id}",
+        )
         try:
-            return await self.execute(job_id)
+            result = await self.execute(message.job_id)
+            if result.status is JobStatus.FAILED_RETRYABLE:
+                requeued = await queue.retry(message)
+                if not requeued:
+                    return await self._mark_failure(
+                        result.id,
+                        JobStatus.FAILED_PERMANENT,
+                        "RETRY_BUDGET_EXHAUSTED",
+                        f"retry budget exhausted after attempt {message.attempt + 1}",
+                    )
+                return result
+            await queue.acknowledge(message)
+            return result
         finally:
-            await queue.acknowledge(job_id)
+            heartbeat.cancel()
+            with suppress(asyncio.CancelledError):
+                await heartbeat
 
     async def run_forever(self, queue: JobQueueConsumer) -> None:
         while True:
-            await self.run_once(queue)
+            try:
+                await self.run_once(queue)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.exception("Worker iteration failed")
+                await asyncio.sleep(1)
+
+    async def _heartbeat(self, queue: JobQueueConsumer, message: QueueMessage) -> None:
+        while True:
+            await asyncio.sleep(self._queue_heartbeat_seconds)
+            await queue.heartbeat(message)
 
     async def _record_engine_progress(self, job_id: str, progress: EngineProgress) -> None:
         if progress.status not in _ENGINE_STATUSES:
@@ -149,9 +174,8 @@ class ProcessTranslationJob:
             )
         job = await self._require_active_job(job_id)
         job = await self._advance_to(job, progress.status)
-        effective_percent = max(job.progress_percent, progress.percent)
         updated = job.record_progress(
-            effective_percent,
+            max(job.progress_percent, progress.percent),
             stage=progress.stage,
         )
         await self._repository.save(updated)
@@ -223,18 +247,10 @@ class ProcessTranslationJob:
             JobStatus.QUALITY_CHECK,
         }:
             job = await self._advance_to(job, JobStatus.TYPESETTING)
-        try:
-            terminal = job.transition_to(
-                status,
-                failure_code=error.code,
-                failure_message=str(error)[:500],
-            )
-        except ValueError:
-            return await self._mark_failure(
-                job_id,
-                JobStatus.FAILED_PERMANENT,
-                error.code,
-                str(error),
-            )
+        terminal = job.transition_to(
+            status,
+            failure_code=error.code,
+            failure_message=str(error)[:500],
+        )
         await self._repository.save(terminal)
         return terminal

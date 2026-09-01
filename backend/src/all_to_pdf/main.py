@@ -42,10 +42,11 @@ def create_app(settings: Settings | None = None, container: Container | None = N
             if worker_task is not None:
                 worker_task.cancel()
                 await asyncio.gather(worker_task, return_exceptions=True)
+            await resolved_container.close()
 
     app = FastAPI(
         title="All_to_PDF API",
-        version="0.2.0",
+        version="0.3.0",
         docs_url="/api/docs",
         openapi_url="/api/openapi.json",
         redoc_url=None,
@@ -75,18 +76,13 @@ def create_app(settings: Settings | None = None, container: Container | None = N
         logger.exception("Unhandled request error", extra={"request_id": request_id})
         return JSONResponse(
             status_code=500,
-            content={
-                "detail": "An unexpected error occurred",
-                "request_id": request_id,
-            },
+            content={"detail": "An unexpected error occurred", "request_id": request_id},
         )
 
     app.include_router(api_router)
-
     web_directory = Path(resolved_container.settings.web_directory)
     if web_directory.is_dir():
         app.mount("/", StaticFiles(directory=web_directory, html=True), name="web")
-
     return app
 
 

@@ -81,6 +81,11 @@ class JobResponse(BaseModel):
         )
 
 
+class DownloadUrlResponse(BaseModel):
+    url: str
+    expires_in_seconds: int
+
+
 class ProviderSummary(BaseModel):
     id: TranslatorProfile
     configured: bool

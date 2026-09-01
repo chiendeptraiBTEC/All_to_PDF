@@ -6,16 +6,17 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-RUN addgroup --system app && adduser --system --ingroup app app
+RUN addgroup --system app && adduser --system --ingroup app --home /home/app app
 
 COPY pyproject.toml README.md ./
 COPY backend ./backend
 COPY frontend ./frontend
 
 RUN python -m pip install --upgrade pip \
-    && python -m pip install .
+    && python -m pip install ".[production]"
 
-RUN mkdir -p /app/var/storage && chown -R app:app /app
+RUN mkdir -p /app/var/storage /app/var/work /home/app \
+    && chown -R app:app /app /home/app
 USER app
 
 EXPOSE 8000

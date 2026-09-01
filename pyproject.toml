@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "all-to-pdf"
-version = "0.2.0"
+version = "0.3.0"
 description = "Production-oriented PDF translation service that preserves layout"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -30,13 +30,14 @@ dev = [
 ]
 production = [
   "asyncpg>=0.30,<1",
+  "boto3>=1.40,<2",
   "redis>=6,<7",
-  "sqlalchemy>=2.0,<3",
 ]
 
 [project.scripts]
 all-to-pdf-api = "all_to_pdf.main:run"
 all-to-pdf-engine-bridge = "all_to_pdf.engine.bridge:main"
+all-to-pdf-worker = "all_to_pdf.worker.main:run"
 
 [tool.setuptools.packages.find]
 where = ["backend/src"]

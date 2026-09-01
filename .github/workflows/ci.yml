@@ -13,31 +13,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
-
       - name: Install project
         run: python -m pip install --upgrade pip && python -m pip install -e ".[dev]"
-
       - name: Lint
-        run: ruff check backend/src backend/tests scripts/smoke_pdf_engine.py
-
+        run: ruff check backend/src backend/tests scripts/smoke_pdf_engine.py scripts/layout_regression.py
       - name: Format check
-        run: ruff format --check backend/src backend/tests scripts/smoke_pdf_engine.py
-
+        run: ruff format --check backend/src backend/tests scripts/smoke_pdf_engine.py scripts/layout_regression.py
       - name: Type check
         run: mypy
-
       - name: Test and coverage
         run: pytest --cov=all_to_pdf --cov-report=term-missing --cov-report=xml
-
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-
       - name: Validate frontend JavaScript
         run: node --check frontend/app.js
 
@@ -46,10 +38,16 @@ jobs:
     needs: quality
     steps:
       - uses: actions/checkout@v4
-      - name: Build image
-        run: docker build --tag all-to-pdf:${{ github.sha }} .
-      - name: Verify non-root user
-        run: docker run --rm all-to-pdf:${{ github.sha }} id -u | grep -v '^0$'
+      - name: Validate compose model
+        run: docker compose config --quiet
+      - name: Build API image
+        run: docker build --tag all-to-pdf-api:${{ github.sha }} .
+      - name: Verify API non-root user
+        run: docker run --rm all-to-pdf-api:${{ github.sha }} id -u | grep -v '^0$'
+      - name: Build worker image
+        run: docker build --file Dockerfile.worker --tag all-to-pdf-worker:${{ github.sha }} .
+      - name: Verify worker non-root user
+        run: docker run --rm all-to-pdf-worker:${{ github.sha }} id -u | grep -v '^0$'
 
   engine-smoke:
     runs-on: ubuntu-latest
@@ -57,12 +55,10 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
-
       - name: Cache BabelDOC assets
         uses: actions/cache@v4
         with:
@@ -72,24 +68,23 @@ jobs:
           key: >-
             babeldoc-${{ runner.os }}-38d3896dcde9-
             f8dffcf4c3a3-v1
-
       - name: Install system libraries
         run: sudo apt-get update && sudo apt-get install --yes libgl1 libglib2.0-0
-
       - name: Install application
         run: python -m pip install --upgrade pip && python -m pip install .
-
       - name: Install pinned PDF engine
         run: ./scripts/install_pdf_engine.sh
-
-      - name: Translate fixture through real BabelDOC
+      - name: Translate smoke fixture through real BabelDOC
         run: python scripts/smoke_pdf_engine.py --output-directory artifacts/engine-smoke
-
-      - name: Upload smoke evidence
+      - name: Run multi-page layout regression
+        run: python scripts/layout_regression.py --output-directory artifacts/layout-regression
+      - name: Upload engine evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: engine-smoke-${{ github.sha }}
-          path: artifacts/engine-smoke
+          name: engine-evidence-${{ github.sha }}
+          path: |
+            artifacts/engine-smoke
+            artifacts/layout-regression
           if-no-files-found: warn
           retention-days: 14
