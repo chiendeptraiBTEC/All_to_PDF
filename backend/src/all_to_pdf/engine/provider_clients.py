@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from typing import Protocol
+from typing import ClassVar, Protocol
 
 import httpx
 
@@ -23,7 +23,7 @@ class DeterministicProviderClient:
     provider_name = "deterministic_test"
     model_name = "deterministic-en-vi-v1"
 
-    _REPLACEMENTS = {
+    _REPLACEMENTS: ClassVar[dict[str, str]] = {
         "Hello world.": "Xin chào thế giới.",
         "Hello": "Xin chào",
     }
